@@ -101,4 +101,42 @@ public sealed partial class CCVars
     /// </summary>
     public static readonly CVarDef<bool> MafiaDirectorAllowEventStart =
         CVarDef.Create("mafia.director.allow_event_start", false, CVar.SERVERONLY);
+
+    /// <summary>Third opt-in gate for the recurring station narrative loop.</summary>
+    public static readonly CVarDef<bool> MafiaDirectorNarrativeEnabled =
+        CVarDef.Create("mafia.director.narrative_enabled", false, CVar.SERVERONLY);
+
+    /// <summary>Comma-separated existing game-rule prototype IDs; empty means no candidates.</summary>
+    public static readonly CVarDef<string> MafiaDirectorNarrativeEventIds =
+        CVarDef.Create("mafia.director.narrative_event_ids", string.Empty, CVar.SERVERONLY);
+
+    /// <summary>Game-authored tone and pacing guidance. It is prompt context, never authority.</summary>
+    public static readonly CVarDef<string> MafiaDirectorNarrativeTheme =
+        CVarDef.Create("mafia.director.narrative_theme", string.Empty, CVar.SERVERONLY);
+
+    public static readonly CVarDef<float> MafiaDirectorNarrativeInitialDelaySeconds =
+        CVarDef.Create("mafia.director.narrative_initial_delay_seconds", 300f, CVar.SERVERONLY);
+
+    public static readonly CVarDef<float> MafiaDirectorNarrativeIntervalSeconds =
+        CVarDef.Create("mafia.director.narrative_interval_seconds", 600f, CVar.SERVERONLY);
+
+    public static readonly CVarDef<float> MafiaDirectorNarrativeRepeatCooldownSeconds =
+        CVarDef.Create("mafia.director.narrative_repeat_cooldown_seconds", 1800f, CVar.SERVERONLY);
+
+    public static readonly CVarDef<int> MafiaDirectorNarrativeMaximumMemories =
+        CVarDef.Create("mafia.director.narrative_maximum_memories", 8, CVar.SERVERONLY);
+
+    /// <summary>
+    /// Third event-start gate for the autonomous narrative loop. Preview choices do not need it.
+    /// </summary>
+    public static readonly CVarDef<bool> MafiaDirectorNarrativeAllowEventStart =
+        CVarDef.Create("mafia.director.narrative_allow_event_start", false, CVar.SERVERONLY);
+
+    /// <summary>Third opt-in gate for recurring, coordinated multi-NPC scene decisions.</summary>
+    public static readonly CVarDef<bool> MafiaDirectorNpcScenesEnabled =
+        CVarDef.Create("mafia.director.npc_scenes_enabled", false, CVar.SERVERONLY);
+
+    /// <summary>Hard lower bound for coordinated NPC scene-decision intervals.</summary>
+    public static readonly CVarDef<float> MafiaDirectorNpcSceneMinimumDecisionSeconds =
+        CVarDef.Create("mafia.director.npc_scene_minimum_decision_seconds", 60f, CVar.SERVERONLY);
 }

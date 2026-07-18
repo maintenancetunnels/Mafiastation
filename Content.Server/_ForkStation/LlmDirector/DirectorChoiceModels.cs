@@ -10,6 +10,27 @@ public sealed record DirectorChoiceOption(string Id, string Description);
 
 public sealed record DirectorChoice(string Id, double Confidence, string Reason);
 
+/// <summary>
+/// Server-authored disposition for one bounded model choice. Consumers may remember this result,
+/// but must still validate all game state immediately before taking any action.
+/// </summary>
+public enum LlmDirectorOutcomeStatus : byte
+{
+    Applied,
+    Retained,
+    Previewed,
+    Selected,
+    Abstained,
+    Rejected,
+    Failed,
+    Cancelled,
+}
+
+public sealed record LlmDirectorOutcome(
+    LlmDirectorOutcomeStatus Status,
+    DirectorChoice? Choice,
+    string Summary);
+
 public static class DirectorChoiceParser
 {
     public const string JsonSchema =

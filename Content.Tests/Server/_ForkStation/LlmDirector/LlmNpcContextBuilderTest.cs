@@ -23,6 +23,15 @@ public static class LlmNpcContextBuilderTest
                 new LlmNpcSpeechMemory(TimeSpan.Zero, "Player", injection),
             },
             System.Array.Empty<LlmNpcGoalMemory>(),
+            new[]
+            {
+                new LlmNpcDecisionMemory(
+                    TimeSpan.Zero,
+                    "GoalA",
+                    LlmDirectorOutcomeStatus.Applied,
+                    0.9,
+                    injection),
+            },
             TimeSpan.FromSeconds(10));
 
         using var document = JsonDocument.Parse(json);
@@ -34,6 +43,9 @@ public static class LlmNpcContextBuilderTest
             Assert.That(root.GetProperty("currentGoal").GetString(), Is.EqualTo("GoalA"));
             Assert.That(
                 root.GetProperty("recentSpeech")[0].GetProperty("message").GetString(),
+                Is.EqualTo(injection));
+            Assert.That(
+                root.GetProperty("recentDecisions")[0].GetProperty("reason").GetString(),
                 Is.EqualTo(injection));
         });
     }
@@ -58,6 +70,7 @@ public static class LlmNpcContextBuilderTest
             "GoalB",
             speech,
             goals,
+            System.Array.Empty<LlmNpcDecisionMemory>(),
             TimeSpan.FromSeconds(40),
             maximumCharacters: 600);
 

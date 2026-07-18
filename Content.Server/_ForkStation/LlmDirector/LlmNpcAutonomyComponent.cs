@@ -41,6 +41,7 @@ public sealed partial class LlmNpcAutonomyComponent : Component
     public string LastObservedGoal = string.Empty;
     public readonly Queue<LlmNpcSpeechMemory> RecentSpeech = new();
     public readonly Queue<LlmNpcGoalMemory> RecentGoals = new();
+    public readonly Queue<LlmNpcDecisionMemory> RecentDecisions = new();
 }
 
 public sealed record LlmNpcSpeechMemory(
@@ -51,3 +52,10 @@ public sealed record LlmNpcSpeechMemory(
 public sealed record LlmNpcGoalMemory(
     TimeSpan ObservedAt,
     string Goal);
+
+public sealed record LlmNpcDecisionMemory(
+    TimeSpan ObservedAt,
+    string ChoiceId,
+    LlmDirectorOutcomeStatus Status,
+    double Confidence,
+    string Reason);

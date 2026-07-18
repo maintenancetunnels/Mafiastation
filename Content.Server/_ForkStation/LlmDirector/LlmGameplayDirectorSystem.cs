@@ -8,6 +8,7 @@ using Content.Shared.GameTicking.Components;
 using Content.Server.NPC.HTN;
 using Content.Server._ForkStation.Moderation;
 using Content.Shared.CCVar;
+using Content.Shared.GameTicking;
 using Content.Shared.Database;
 using Content.Shared.Prototypes;
 using Robust.Server.Player;
@@ -40,6 +41,7 @@ public sealed class LlmGameplayDirectorSystem : EntitySystem
 
     private const int MaximumChoices = 24;
     private const int MaximumContextCharacters = 2000;
+    private const int MaximumPurposeCharacters = 300;
 
     [Dependency] private readonly IConfigurationManager _cfg = default!;
     [Dependency] private readonly IPrototypeManager _prototypes = default!;
@@ -61,13 +63,19 @@ public sealed class LlmGameplayDirectorSystem : EntitySystem
     public override void Initialize()
     {
         base.Initialize();
+        SubscribeLocalEvent<RoundRestartCleanupEvent>(OnRoundRestart);
         Subs.CVar(_cfg, CCVars.MafiaDirectorEnabled, OnDirectorEnabledChanged, true);
     }
 
     private void OnDirectorEnabledChanged(bool enabled)
     {
         if (!enabled)
-            _pending.Clear();
+            CancelAllPending("LLM director was disabled.");
+    }
+
+    private void OnRoundRestart(RoundRestartCleanupEvent ev)
+    {
+        CancelAllPending("Round ended before the LLM choice completed.");
     }
 
     public override void Update(float frameTime)
@@ -90,6 +98,25 @@ public sealed class LlmGameplayDirectorSystem : EntitySystem
         EntityUid target,
         IReadOnlyList<DirectorChoiceOption> options,
         string context,
+        out string error)
+    {
+        return TryRequestNpcGoal(
+            requester,
+            target,
+            options,
+            context,
+            onCompleted: null,
+            isStillAuthorized: null,
+            out error);
+    }
+
+    public bool TryRequestNpcGoal(
+        NetUserId? requester,
+        EntityUid target,
+        IReadOnlyList<DirectorChoiceOption> options,
+        string context,
+        Action<LlmDirectorOutcome>? onCompleted,
+        Func<bool>? isStillAuthorized,
         out string error)
     {
         if (!TryComp<HTNComponent>(target, out var htn))
@@ -120,18 +147,23 @@ public sealed class LlmGameplayDirectorSystem : EntitySystem
         return TryQueue(
             requester,
             DirectorChoiceKind.NpcGoal,
+            "Choose the NPC's next high-level HTN root goal.",
             validated,
             context,
             state,
             target,
             startSelectedRule: false,
+            onCompleted,
+            isStillAuthorized,
             out error);
     }
 
     public void CancelPendingNpcGoal(EntityUid target)
     {
-        _pending.RemoveAll(pending =>
-            pending.Kind == DirectorChoiceKind.NpcGoal && pending.Target == target);
+        CancelPending(
+            pending =>
+                pending.Kind == DirectorChoiceKind.NpcGoal && pending.Target == target,
+            "NPC goal request was canceled.");
     }
 
     public bool TryRequestGameRule(
@@ -139,6 +171,25 @@ public sealed class LlmGameplayDirectorSystem : EntitySystem
         IReadOnlyList<DirectorChoiceOption> options,
         string context,
         bool startSelectedRule,
+        out string error)
+    {
+        return TryRequestGameRule(
+            requester,
+            options,
+            context,
+            startSelectedRule,
+            onCompleted: null,
+            isStillAuthorized: null,
+            out error);
+    }
+
+    public bool TryRequestGameRule(
+        NetUserId? requester,
+        IReadOnlyList<DirectorChoiceOption> options,
+        string context,
+        bool startSelectedRule,
+        Action<LlmDirectorOutcome>? onCompleted,
+        Func<bool>? isStillAuthorized,
         out string error)
     {
         if (startSelectedRule && !_cfg.GetCVar(CCVars.MafiaDirectorAllowEventStart))
@@ -158,22 +209,65 @@ public sealed class LlmGameplayDirectorSystem : EntitySystem
         return TryQueue(
             requester,
             DirectorChoiceKind.GameRule,
+            "Choose one bounded game-rule event candidate.",
             validated,
             context,
             state,
             EntityUid.Invalid,
             startSelectedRule,
+            onCompleted,
+            isStillAuthorized,
+            out error);
+    }
+
+    /// <summary>
+    /// Selects one server-authored plan ID without applying any action. The callback's owner must
+    /// map the ID to prevalidated game state and validate that mapping again before use.
+    /// </summary>
+    public bool TryRequestPlan(
+        NetUserId? requester,
+        IReadOnlyList<DirectorChoiceOption> options,
+        string purpose,
+        string context,
+        Action<LlmDirectorOutcome> onCompleted,
+        Func<bool>? isStillAuthorized,
+        out string error)
+    {
+        purpose = purpose.Trim();
+        if (purpose.Length is < 1 or > MaximumPurposeCharacters)
+        {
+            error = $"Plan purpose must contain 1 to {MaximumPurposeCharacters} characters.";
+            return false;
+        }
+
+        if (!TryValidateOptions(options, _ => true, out var validated, out error))
+            return false;
+
+        return TryQueue(
+            requester,
+            DirectorChoiceKind.Plan,
+            purpose,
+            validated,
+            context,
+            "The server owns every plan mapping and exposes no free-form action surface.",
+            EntityUid.Invalid,
+            startSelectedRule: false,
+            onCompleted,
+            isStillAuthorized,
             out error);
     }
 
     private bool TryQueue(
         NetUserId? requester,
         DirectorChoiceKind kind,
+        string purpose,
         IReadOnlyList<DirectorChoiceOption> options,
         string context,
         string currentState,
         EntityUid target,
         bool startSelectedRule,
+        Action<LlmDirectorOutcome>? onCompleted,
+        Func<bool>? isStillAuthorized,
         out string error)
     {
         if (!_cfg.GetCVar(CCVars.MafiaDirectorEnabled))
@@ -207,14 +301,12 @@ public sealed class LlmGameplayDirectorSystem : EntitySystem
         var allOptions = options
             .Append(new DirectorChoiceOption(
                 "none",
-                "Do not change the NPC goal or start an event when no option is coherent."))
+                "Abstain when no supplied choice is coherent with the stated purpose."))
             .ToArray();
         using var schemaDocument = JsonDocument.Parse(DirectorChoiceParser.JsonSchema);
         var payload = new
         {
-            purpose = kind == DirectorChoiceKind.NpcGoal
-                ? "Choose the NPC's next high-level HTN root goal."
-                : "Choose one bounded game-rule event candidate.",
+            purpose,
             currentState,
             context,
             choices = allOptions,
@@ -222,7 +314,12 @@ public sealed class LlmGameplayDirectorSystem : EntitySystem
         };
         var prompt = JsonSerializer.Serialize(payload, PromptJsonOptions);
         var request = new LlmStructuredRequest(
-            kind == DirectorChoiceKind.NpcGoal ? "npc-goal" : "game-rule",
+            kind switch
+            {
+                DirectorChoiceKind.NpcGoal => "npc-goal",
+                DirectorChoiceKind.GameRule => "game-rule",
+                _ => "bounded-plan",
+            },
             SystemPrompt,
             prompt,
             "ss14_director_choice",
@@ -239,7 +336,9 @@ public sealed class LlmGameplayDirectorSystem : EntitySystem
             kind,
             allowed,
             target,
-            startSelectedRule));
+            startSelectedRule,
+            onCompleted,
+            isStillAuthorized));
         error = string.Empty;
         return true;
     }
@@ -250,7 +349,11 @@ public sealed class LlmGameplayDirectorSystem : EntitySystem
         if (!_cfg.GetCVar(CCVars.MafiaDirectorEnabled) ||
             !_gateway.IsAvailable())
         {
-            Reply(pending.Requester, "LLM director was disabled before the choice completed.");
+            Finish(
+                pending,
+                LlmDirectorOutcomeStatus.Cancelled,
+                choice: null,
+                "LLM director was disabled before the choice completed.");
             return;
         }
 
@@ -260,14 +363,20 @@ public sealed class LlmGameplayDirectorSystem : EntitySystem
         }
         catch (Exception exception)
         {
-            Reply(pending.Requester, $"LLM director task failed: {exception.GetType().Name}.");
+            Finish(
+                pending,
+                LlmDirectorOutcomeStatus.Failed,
+                choice: null,
+                $"LLM director task failed: {exception.GetType().Name}.");
             return;
         }
 
         if (!result.Success || result.Content == null)
         {
-            Reply(
-                pending.Requester,
+            Finish(
+                pending,
+                LlmDirectorOutcomeStatus.Failed,
+                choice: null,
                 $"LLM director request failed ({result.FailureKind}): {result.SafeError}");
             return;
         }
@@ -275,7 +384,11 @@ public sealed class LlmGameplayDirectorSystem : EntitySystem
         if (!DirectorChoiceParser.TryParse(result.Content, pending.AllowedIds, out var choice) ||
             choice == null)
         {
-            Reply(pending.Requester, "LLM director returned an invalid or non-allowlisted choice.");
+            Finish(
+                pending,
+                LlmDirectorOutcomeStatus.Rejected,
+                choice: null,
+                "LLM director returned an invalid or non-allowlisted choice.");
             return;
         }
 
@@ -285,8 +398,10 @@ public sealed class LlmGameplayDirectorSystem : EntitySystem
             1f);
         if (choice.Confidence < minimumConfidence)
         {
-            Reply(
-                pending.Requester,
+            Finish(
+                pending,
+                LlmDirectorOutcomeStatus.Abstained,
+                choice,
                 $"LLM director abstained: confidence {choice.Confidence:P0} is below " +
                 $"{minimumConfidence:P0}. Reason: {choice.Reason}");
             return;
@@ -294,14 +409,40 @@ public sealed class LlmGameplayDirectorSystem : EntitySystem
 
         if (choice.Id == "none")
         {
-            Reply(pending.Requester, $"LLM director selected no change. Reason: {choice.Reason}");
+            Finish(
+                pending,
+                LlmDirectorOutcomeStatus.Abstained,
+                choice,
+                $"LLM director selected no change. Reason: {choice.Reason}");
             return;
         }
 
-        if (pending.Kind == DirectorChoiceKind.NpcGoal)
-            ApplyNpcGoal(pending, choice);
-        else
-            ApplyGameRuleChoice(pending, choice);
+        if (!IsStillAuthorized(pending))
+        {
+            Finish(
+                pending,
+                LlmDirectorOutcomeStatus.Cancelled,
+                choice,
+                "The bounded LLM choice was no longer authorized when it completed.");
+            return;
+        }
+
+        switch (pending.Kind)
+        {
+            case DirectorChoiceKind.NpcGoal:
+                ApplyNpcGoal(pending, choice);
+                break;
+            case DirectorChoiceKind.GameRule:
+                ApplyGameRuleChoice(pending, choice);
+                break;
+            default:
+                Finish(
+                    pending,
+                    LlmDirectorOutcomeStatus.Selected,
+                    choice,
+                    $"LLM director selected bounded plan {choice.Id}. Reason: {choice.Reason}");
+                break;
+        }
     }
 
     private void ApplyNpcGoal(PendingChoice pending, DirectorChoice choice)
@@ -310,15 +451,21 @@ public sealed class LlmGameplayDirectorSystem : EntitySystem
             !TryComp<HTNComponent>(pending.Target, out var htn) ||
             !_prototypes.HasIndex<HTNCompoundPrototype>(choice.Id))
         {
-            Reply(pending.Requester, "NPC or selected HTN goal no longer exists.");
+            Finish(
+                pending,
+                LlmDirectorOutcomeStatus.Rejected,
+                choice,
+                "NPC or selected HTN goal no longer exists.");
             return;
         }
 
         var previous = htn.RootTask.Task;
         if (previous == choice.Id)
         {
-            Reply(
-                pending.Requester,
+            Finish(
+                pending,
+                LlmDirectorOutcomeStatus.Retained,
+                choice,
                 $"LLM director retained NPC goal {choice.Id}. Reason: {choice.Reason}");
             return;
         }
@@ -336,8 +483,10 @@ public sealed class LlmGameplayDirectorSystem : EntitySystem
             LogType.Action,
             LogImpact.Medium,
             $"LLM director changed {ToPrettyString(pending.Target):entity} HTN root from {previous} to {choice.Id}; requester={pending.Requester}; confidence={choice.Confidence:P0}");
-        Reply(
-            pending.Requester,
+        Finish(
+            pending,
+            LlmDirectorOutcomeStatus.Applied,
+            choice,
             $"Applied NPC HTN goal {choice.Id} (was {previous}, confidence " +
             $"{choice.Confidence:P0}). Reason: {choice.Reason}");
     }
@@ -346,14 +495,20 @@ public sealed class LlmGameplayDirectorSystem : EntitySystem
     {
         if (!IsGameRulePrototype(choice.Id))
         {
-            Reply(pending.Requester, "Selected game-rule prototype no longer exists.");
+            Finish(
+                pending,
+                LlmDirectorOutcomeStatus.Rejected,
+                choice,
+                "Selected game-rule prototype no longer exists.");
             return;
         }
 
         if (!pending.StartSelectedRule)
         {
-            Reply(
-                pending.Requester,
+            Finish(
+                pending,
+                LlmDirectorOutcomeStatus.Previewed,
+                choice,
                 $"LLM director preview selected game rule {choice.Id} " +
                 $"(confidence {choice.Confidence:P0}). Reason: {choice.Reason}");
             return;
@@ -361,13 +516,21 @@ public sealed class LlmGameplayDirectorSystem : EntitySystem
 
         if (!_cfg.GetCVar(CCVars.MafiaDirectorAllowEventStart))
         {
-            Reply(pending.Requester, "Event-start gate was disabled before the choice completed.");
+            Finish(
+                pending,
+                LlmDirectorOutcomeStatus.Cancelled,
+                choice,
+                "Event-start gate was disabled before the choice completed.");
             return;
         }
 
         if (!_ticker.StartGameRule(choice.Id))
         {
-            Reply(pending.Requester, $"Game rule {choice.Id} could not be started.");
+            Finish(
+                pending,
+                LlmDirectorOutcomeStatus.Failed,
+                choice,
+                $"Game rule {choice.Id} could not be started.");
             return;
         }
 
@@ -375,10 +538,81 @@ public sealed class LlmGameplayDirectorSystem : EntitySystem
             LogType.Action,
             LogImpact.High,
             $"LLM director started allowlisted game rule {choice.Id}; requester={pending.Requester}; confidence={choice.Confidence:P0}");
-        Reply(
-            pending.Requester,
+        Finish(
+            pending,
+            LlmDirectorOutcomeStatus.Applied,
+            choice,
             $"Started allowlisted game rule {choice.Id} (confidence " +
             $"{choice.Confidence:P0}). Reason: {choice.Reason}");
+    }
+
+    private bool IsStillAuthorized(PendingChoice pending)
+    {
+        if (pending.IsStillAuthorized == null)
+            return true;
+
+        try
+        {
+            return pending.IsStillAuthorized();
+        }
+        catch (Exception exception)
+        {
+            Sawmill.Error(
+                $"LLM director authorization callback failed: {exception.GetType().Name}.");
+            return false;
+        }
+    }
+
+    private void CancelAllPending(string summary)
+    {
+        var cancelled = _pending.ToArray();
+        _pending.Clear();
+        foreach (var pending in cancelled)
+        {
+            Finish(
+                pending,
+                LlmDirectorOutcomeStatus.Cancelled,
+                choice: null,
+                summary);
+        }
+    }
+
+    private void CancelPending(Predicate<PendingChoice> predicate, string summary)
+    {
+        for (var i = _pending.Count - 1; i >= 0; i--)
+        {
+            var pending = _pending[i];
+            if (!predicate(pending))
+                continue;
+
+            _pending.RemoveAt(i);
+            Finish(
+                pending,
+                LlmDirectorOutcomeStatus.Cancelled,
+                choice: null,
+                summary);
+        }
+    }
+
+    private void Finish(
+        PendingChoice pending,
+        LlmDirectorOutcomeStatus status,
+        DirectorChoice? choice,
+        string summary)
+    {
+        Reply(pending.Requester, summary);
+        if (pending.OnCompleted == null)
+            return;
+
+        try
+        {
+            pending.OnCompleted(new LlmDirectorOutcome(status, choice, summary));
+        }
+        catch (Exception exception)
+        {
+            Sawmill.Error(
+                $"LLM director completion callback failed: {exception.GetType().Name}.");
+        }
     }
 
     private bool IsGameRulePrototype(string id)
@@ -447,6 +681,7 @@ public sealed class LlmGameplayDirectorSystem : EntitySystem
     {
         NpcGoal,
         GameRule,
+        Plan,
     }
 
     private sealed record PendingChoice(
@@ -455,5 +690,7 @@ public sealed class LlmGameplayDirectorSystem : EntitySystem
         DirectorChoiceKind Kind,
         HashSet<string> AllowedIds,
         EntityUid Target,
-        bool StartSelectedRule);
+        bool StartSelectedRule,
+        Action<LlmDirectorOutcome>? OnCompleted,
+        Func<bool>? IsStillAuthorized);
 }

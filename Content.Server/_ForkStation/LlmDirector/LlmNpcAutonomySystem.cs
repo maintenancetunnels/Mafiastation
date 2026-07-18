@@ -21,6 +21,7 @@ public sealed class LlmNpcAutonomySystem : EntitySystem
     private const float MaximumDecisionSeconds = 3600f;
     private const float MaximumObservationRadius = 30f;
     private const int MaximumGoalMemories = 8;
+    private const int MaximumDecisionMemories = 8;
 
     [Dependency] private readonly IConfigurationManager _cfg = default!;
     [Dependency] private readonly IPrototypeManager _prototypes = default!;
@@ -95,6 +96,7 @@ public sealed class LlmNpcAutonomySystem : EntitySystem
                 htn.RootTask.Task,
                 autonomy.RecentSpeech.ToArray(),
                 autonomy.RecentGoals.ToArray(),
+                autonomy.RecentDecisions.ToArray(),
                 now);
 
             _director.TryRequestNpcGoal(
@@ -102,6 +104,8 @@ public sealed class LlmNpcAutonomySystem : EntitySystem
                 uid,
                 options,
                 context,
+                outcome => OnDecisionCompleted(uid, autonomy, outcome),
+                () => IsStillAuthorized(uid, autonomy),
                 out _);
         }
     }
@@ -160,6 +164,7 @@ public sealed class LlmNpcAutonomySystem : EntitySystem
         autonomy.LastObservedGoal = htn.RootTask.Task;
         autonomy.RecentSpeech.Clear();
         autonomy.RecentGoals.Clear();
+        autonomy.RecentDecisions.Clear();
         error = string.Empty;
         return true;
     }
@@ -228,6 +233,40 @@ public sealed class LlmNpcAutonomySystem : EntitySystem
                 speakerName,
                 text));
         }
+    }
+
+    private bool IsStillAuthorized(
+        EntityUid uid,
+        LlmNpcAutonomyComponent expected)
+    {
+        return _cfg.GetCVar(CCVars.MafiaDirectorNpcAutonomyEnabled) &&
+               Exists(uid) &&
+               TryComp<LlmNpcAutonomyComponent>(uid, out var current) &&
+               ReferenceEquals(current, expected);
+    }
+
+    private void OnDecisionCompleted(
+        EntityUid uid,
+        LlmNpcAutonomyComponent expected,
+        LlmDirectorOutcome outcome)
+    {
+        if (!Exists(uid) ||
+            !TryComp<LlmNpcAutonomyComponent>(uid, out var current) ||
+            !ReferenceEquals(current, expected) ||
+            outcome.Choice == null)
+        {
+            return;
+        }
+
+        while (current.RecentDecisions.Count >= MaximumDecisionMemories)
+            current.RecentDecisions.Dequeue();
+
+        current.RecentDecisions.Enqueue(new LlmNpcDecisionMemory(
+            _timing.CurTime,
+            outcome.Choice.Id,
+            outcome.Status,
+            outcome.Choice.Confidence,
+            outcome.Choice.Reason));
     }
 
     private bool TryValidateGoals(
@@ -301,6 +340,12 @@ public sealed class LlmNpcAutonomySystem : EntitySystem
                memory.ObservedAt < oldest)
         {
             autonomy.RecentSpeech.Dequeue();
+        }
+
+        while (autonomy.RecentDecisions.TryPeek(out var decision) &&
+               decision.ObservedAt < oldest)
+        {
+            autonomy.RecentDecisions.Dequeue();
         }
     }
 }
