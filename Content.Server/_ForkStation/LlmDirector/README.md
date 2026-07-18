@@ -6,10 +6,11 @@ HTN root tasks or game-rule prototypes; the model may return one exact ID or `no
 then independently validates the JSON, allowlist membership, confidence, prototype existence, and
 target state.
 
-Autonomous NPC and scene modes send configured personas/premises, current/recent HTN goals,
-bounded model-choice rationales, and a bounded window of nearby speaker names and IC speech to the
-configured endpoint. Narrative mode sends round number/time, online player count, active
-game-rule IDs, an operator-authored theme, and recent director choices. With a remote endpoint,
+Autonomous NPC, dialogue, and scene modes send configured personas/premises, current/recent HTN
+goals, bounded model-choice rationales, prior dialogue proposals, and a bounded window of nearby
+speaker names and IC speech to the configured endpoint. Narrative mode sends round number/time,
+online player count, active game-rule IDs, an operator-authored theme, and recent director choices.
+With a remote endpoint,
 that data leaves the game server; apply the same player notice, provider-retention, consent,
 cross-border processing, deletion, and privacy review described in the moderation README. Do not
 enable these modes until that data flow is acceptable for the server and its players.
@@ -24,6 +25,10 @@ max_pending_requests = 4
 npc_autonomy_enabled = false
 npc_minimum_decision_seconds = 60
 npc_maximum_speech_memories = 12
+npc_dialogue_enabled = false
+npc_dialogue_allow_speech = false
+npc_dialogue_minimum_seconds = 120
+npc_dialogue_maximum_characters = 180
 allow_event_start = false
 narrative_enabled = false
 narrative_event_ids = ""
@@ -46,6 +51,10 @@ Examples:
 llmnpcgoal <netEntityId> SimpleHostileCompound,SimpleHumanoidHostileCompound "The target is hunting through maintenance."
 llmnpcautonomy <netEntityId> 90 SimpleHostileCompound,SimpleHumanoidHostileCompound "A suspicious station custodian who reacts to nearby conversation."
 llmnpcautonomyoff <netEntityId>
+llmnpcdialogue <netEntityId> 120 "A terse maintenance custodian; observant, suspicious, and never verbose."
+llmnpcdialoguestatus <netEntityId>
+llmnpcdialoguenow <netEntityId>
+llmnpcdialogueoff <netEntityId>
 llmevent LiminalFlicker,BlackoutHunt "Prefer an eerie event that has not just occurred."
 llmevent LiminalFlicker,BlackoutHunt --start "Start one fitting event."
 llmnarrativestatus
@@ -62,6 +71,32 @@ locomotion, targeting, combat, and every concrete action continue to run through
 server-owned HTN operators. Autonomous
 requests require both `enabled` and `npc_autonomy_enabled`, and share the global request/token
 budgets.
+
+## Contextual NPC dialogue
+
+`llmnpcdialogue` attaches a separate low-frequency dialogue layer to an existing HTN NPC. It
+refuses player-controlled entities, remembers a bounded and expiring window of nearby accepted IC
+speech and prior proposals, schedules one initial proposal, then only requests another after new
+context arrives or an admin uses `llmnpcdialoguenow`. Generated dialogue never supplies commands,
+entity IDs, coordinates, HTN goals, or other game-action parameters.
+
+Dialogue generation requires `mafia.llm.enabled`, `mafia.director.enabled`, and the independent
+`mafia.director.npc_dialogue_enabled` gate. The response must be an exact three-field JSON object:
+`shouldSpeak`, `text`, and an allowlisted `tone`. The parser rejects extra or duplicate fields,
+over-length text, control/bidirectional characters, links, and obvious OOC or server/admin
+impersonation prefixes. The ordinary chat system still performs its normal action and message
+checks, radio-prefix processing is disabled, and every previewed or submitted line is admin-logged.
+
+Valid output is preview-only unless `mafia.director.npc_dialogue_allow_speech` was enabled when
+the request was queued and remains enabled at completion. Disabling a generation or speech gate,
+reconfiguring/removing the component, changing provider/endpoint/model, possessing the NPC, or
+ending the round invalidates the in-flight result. Generated lines are not fed back into this
+dialogue system as new observations, limiting model-to-model loops.
+
+The speech gate is a risk boundary, not a content guarantee. Prompt rules and structural checks
+cannot prove that a cheap model's line is appropriate for every community or scene. Review
+previews and provider behavior before enabling speech, retain admin logs, publish the player-data
+notice, and disable the gate immediately if output quality is not acceptable.
 
 `llmevent` is preview-only unless `--start` is present. Even with `--start`, execution is refused
 unless `mafia.director.allow_event_start` is true. This double gate is intentional.
@@ -91,9 +126,9 @@ only a beat ID or `none`.
 
 On an accepted beat, the server looks up the pre-authored mapping, validates every member and goal
 before changing anything, pauses enabled HTN planners, assigns the roots as a batch, and resumes
-them. The model cannot generate speech, commands, coordinates, entity IDs, goal IDs, parameters,
-or individual actions. Scene configurations are runtime-only and are cleared on round lifecycle
-reset. `npc_scenes_enabled` is a separate default-off gate; disabling/removing a scene invalidates
+them. The scene selector cannot generate speech, commands, coordinates, entity IDs, goal IDs,
+parameters, or individual actions. Scene configurations are runtime-only and are cleared during
+round lifecycle reset. `npc_scenes_enabled` is a separate default-off gate; disabling/removing a scene invalidates
 its pending result.
 
 The public system methods accept `DirectorChoiceOption` records, so future game-owned director

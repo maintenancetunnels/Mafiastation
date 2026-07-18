@@ -96,6 +96,22 @@ public sealed partial class CCVars
     public static readonly CVarDef<int> MafiaDirectorNpcMaximumSpeechMemories =
         CVarDef.Create("mafia.director.npc_maximum_speech_memories", 12, CVar.SERVERONLY);
 
+    /// <summary>Independent default-off gate for contextual NPC dialogue proposals.</summary>
+    public static readonly CVarDef<bool> MafiaDirectorNpcDialogueEnabled =
+        CVarDef.Create("mafia.director.npc_dialogue_enabled", false, CVar.SERVERONLY);
+
+    /// <summary>Separate default-off actuation gate for validated model text entering IC chat.</summary>
+    public static readonly CVarDef<bool> MafiaDirectorNpcDialogueAllowSpeech =
+        CVarDef.Create("mafia.director.npc_dialogue_allow_speech", false, CVar.SERVERONLY);
+
+    /// <summary>Hard lower bound for each configured NPC's dialogue-proposal interval.</summary>
+    public static readonly CVarDef<float> MafiaDirectorNpcDialogueMinimumDecisionSeconds =
+        CVarDef.Create("mafia.director.npc_dialogue_minimum_seconds", 120f, CVar.SERVERONLY);
+
+    /// <summary>Maximum normalized characters in one generated IC line.</summary>
+    public static readonly CVarDef<int> MafiaDirectorNpcDialogueMaximumCharacters =
+        CVarDef.Create("mafia.director.npc_dialogue_maximum_characters", 180, CVar.SERVERONLY);
+
     /// <summary>
     /// Second gate for llmevent --start. Preview selection remains available when this is false.
     /// </summary>
