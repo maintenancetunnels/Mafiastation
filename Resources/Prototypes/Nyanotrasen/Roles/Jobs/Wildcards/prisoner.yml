@@ -9,13 +9,14 @@
 #  whitelistRequired: true
   icon: "JobIconPrisoner"
   supervisors: job-supervisors-security
-  requirements:
-    - !type:DepartmentTimeRequirement
-      department: Security
-      time: 6h
+  setPreference: false # _ForkStation: persistent prisoners are force-assigned, not voluntarily chosen
+  # _ForkStation: no playtime requirement — penalized players must always be assignable to this job.
   special:
   - !type:AddImplantSpecial
     implants: [ TrackingImplant ]
+  - !type:AddComponentSpecial # _ForkStation: good behavior credit tracking
+    components:
+      - type: GoodBehavior
 
 - type: startingGear
   id: PrisonerGear

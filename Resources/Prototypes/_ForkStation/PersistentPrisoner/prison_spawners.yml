@@ -1,0 +1,57 @@
+# Persistent Prisoner - Solitary Confinement Spawn Point
+# Prisoners with 15+ penalty rounds are relocated here after spawn (SolitaryConfinementSystem).
+# Not a job SpawnPoint on purpose: regular prisoner spawns must never pick it.
+- type: entity
+  id: SpawnPointPrisonerSolitary
+  parent: MarkerBase
+  name: solitary confinement spawn
+  suffix: Persistent Prisoner, 15+
+  components:
+  - type: SolitaryConfinementSpawnPoint
+  - type: Sprite
+    layers:
+      - state: red
+      - sprite: Markers/jobs.rsi
+        state: prisoner
+
+# Prison Contraband Spawner - Random escape tools
+# Spawns in permabrig locations. Has a chance to place useful items
+# that prisoners can find (under beds, in toilets, etc.)
+- type: entity
+  id: PrisonContrabandSpawner
+  name: prison contraband spawner
+  suffix: Random Prison Tools
+  parent: MarkerBase
+  components:
+  - type: Sprite
+    layers:
+      - state: orange
+      - sprite: Markers/cross.rsi
+        state: cross
+  - type: RandomSpawner
+    chance: 0.25
+    offset: 0.2
+    prototypes:
+      - Screwdriver
+      - Wrench
+      - Crowbar
+      - Wirecutter
+      - Welder
+      - ClothingMaskGas
+      - OxygenTankFilled
+      - Flare
+      - FlashlightLantern
+      - KitchenKnife
+      - ClothingOuterWinterCoat
+      - FoodSnackChocolateBar
+    rarePrototypes:
+      - Multitool
+      - ClothingMaskGasSecurity
+      - DoubleEmergencyOxygenTankFilled
+      - ToolboxMechanicalFilled
+      - CableApcStack
+    rareChance: 0.15
+
+# NOTE: the EE version had a PrisonSecurityBotSpawner (MobDisablerBot/MobBatonBot).
+# Delta-V has no combat/security bot prototypes, so it was dropped in the port.
+# Reintroduce once a securitron-style mob exists in this fork.

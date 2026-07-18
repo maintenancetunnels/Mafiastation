@@ -1,0 +1,14 @@
+# Mafiastation server configuration.
+# Launch via run_server.ps1 so this file is picked up.
+
+[movement]
+# Native wizden mob collision: mobs softly push each other apart instead of
+# phasing through each other. The component ships on BaseMob; this turns the
+# system on (upstream default is false).
+mob_pushing = true
+
+[game]
+# Persistent Prisoner system (see docs/design/PersistentPrisoners.md).
+persistent_prisoner = true
+persistent_prisoner_decay = true
+persistent_prisoner_decay_hours = 48.0

@@ -1,0 +1,57 @@
+<DefaultWindow xmlns="https://spacestation14.io"
+               xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+               Title="Penalty Management Console"
+               MinSize="700 500"
+               SetSize="750 550">
+    <BoxContainer Orientation="Horizontal" HorizontalExpand="True" VerticalExpand="True" Margin="5">
+        <!-- Left Panel: Player List -->
+        <BoxContainer Orientation="Vertical" MinWidth="250" Margin="0 0 5 0">
+            <Label Text="Crew Members" StyleClasses="LabelHeadingBig" Margin="0 0 0 5" />
+            <LineEdit Name="SearchBar" PlaceHolder="Search..." Margin="0 0 0 3" HorizontalExpand="True" />
+            <ScrollContainer VerticalExpand="True" HorizontalExpand="True">
+                <ItemList Name="PlayerList" VerticalExpand="True" HorizontalExpand="True" />
+            </ScrollContainer>
+        </BoxContainer>
+
+        <!-- Right Panel: Selected Player Details -->
+        <PanelContainer StyleClasses="AngleRect" HorizontalExpand="True" VerticalExpand="True">
+            <BoxContainer Orientation="Vertical" Margin="8" HorizontalExpand="True" VerticalExpand="True">
+                <Label Name="SelectedNameLabel" Text="No player selected" StyleClasses="LabelHeadingBig" />
+                <Label Name="SelectedJobLabel" Text="" StyleClasses="LabelSubText" />
+                <Label Name="PenaltyCountLabel" Text="" Margin="0 5 0 0" />
+                <Label Name="DangerLabel" Text="" StyleClasses="LabelKeyValue" Margin="0 0 0 5" />
+
+                <!-- Penalty History -->
+                <Label Text="Penalty History" StyleClasses="LabelHeading" Margin="0 5 0 3" />
+                <ScrollContainer VerticalExpand="True" HorizontalExpand="True" MinHeight="150">
+                    <ItemList Name="PenaltyList" VerticalExpand="True" HorizontalExpand="True" />
+                </ScrollContainer>
+
+                <!-- Actions -->
+                <BoxContainer Orientation="Horizontal" Margin="0 8 0 0">
+                    <Button Name="AddPenaltyButton" Text="Add Penalty" StyleClasses="ButtonColorRed" Disabled="True" MinWidth="120" />
+                    <Button Name="UndoPenaltyButton" Text="Undo Selected" Margin="5 0 0 0" Disabled="True" MinWidth="120" />
+                </BoxContainer>
+
+                <!-- Add Penalty Form (hidden by default) -->
+                <PanelContainer Name="AddPenaltyPanel" StyleClasses="AngleRect" Visible="False" Margin="0 5 0 0">
+                    <BoxContainer Orientation="Vertical" Margin="5">
+                        <Label Text="Apply Penalty Rounds" StyleClasses="LabelHeading" />
+                        <BoxContainer Orientation="Horizontal" Margin="0 3 0 0">
+                            <Label Text="Rounds (1-5): " MinWidth="100" />
+                            <SpinBox Name="RoundsSpinBox" MinWidth="80" />
+                        </BoxContainer>
+                        <BoxContainer Orientation="Horizontal" Margin="0 3 0 0">
+                            <Label Text="Reason: " MinWidth="100" />
+                            <LineEdit Name="ReasonEdit" HorizontalExpand="True" PlaceHolder="Enter crime/reason..." />
+                        </BoxContainer>
+                        <BoxContainer Orientation="Horizontal" Margin="0 5 0 0">
+                            <Button Name="ConfirmPenaltyButton" Text="Confirm" StyleClasses="ButtonColorRed" MinWidth="100" />
+                            <Button Name="CancelPenaltyButton" Text="Cancel" Margin="5 0 0 0" MinWidth="100" />
+                        </BoxContainer>
+                    </BoxContainer>
+                </PanelContainer>
+            </BoxContainer>
+        </PanelContainer>
+    </BoxContainer>
+</DefaultWindow>

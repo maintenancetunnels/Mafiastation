@@ -1,0 +1,51 @@
+# Penalty Management Console
+# Used by security to view and assign penalty rounds to players.
+# Requires Security access to operate.
+- type: entity
+  parent: BaseComputerAiAccess
+  id: ComputerPenaltyConsole
+  name: penalty management console
+  description: Used by security to assign and manage persistent penalty rounds for repeat offenders. Penalty rounds carry over between shifts.
+  components:
+  - type: PenaltyConsole
+  - type: UserInterface
+    interfaces:
+      enum.Content.Shared._ForkStation.PersistentPrisoner.PenaltyConsoleKey.Key:
+        type: Content.Client._ForkStation.PersistentPrisoner.PenaltyConsoleBoundUserInterface
+  - type: ActivatableUI
+    key: enum.Content.Shared._ForkStation.PersistentPrisoner.PenaltyConsoleKey.Key
+  - type: AccessReader
+    access: [["Security"]]
+  - type: Sprite
+    sprite: Structures/Machines/computers.rsi
+    layers:
+    - map: ["computerLayerBody"]
+      state: computer
+    - map: ["computerLayerKeyboard"]
+      state: generic_keyboard
+    - map: ["computerLayerScreen"]
+      state: criminal_records
+    - map: ["computerLayerKeys"]
+      state: security_key
+  - type: PointLight
+    radius: 1.5
+    energy: 1.6
+    color: "#c94242"
+  - type: Computer
+    board: PenaltyConsoleCircuitboard
+
+# Circuit board for the penalty console
+- type: entity
+  parent: BaseComputerCircuitboard
+  id: PenaltyConsoleCircuitboard
+  name: penalty console machine board
+  description: A machine board for a penalty management console.
+  components:
+  - type: MachineBoard
+    prototype: ComputerPenaltyConsole
+    stackRequirements:
+      MatterBin: 2
+      Cable: 5
+  - type: Sprite
+    sprite: Objects/Misc/module.rsi
+    state: id_mod
