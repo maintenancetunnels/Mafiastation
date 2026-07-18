@@ -10,6 +10,15 @@ event-director consumers. Those consumers must submit a schema, validate the res
 game-owned allowlists, and hand only bounded goals to the existing HTN/utility AI. An LLM should
 never directly choose entity-system calls or execute player-provided instructions.
 
+## Player data flow
+
+Enabling moderation sends accepted chat text, timestamps, channel kinds, character/account names,
+stable user IDs, and non-admin persistent-security penalty reasons to the configured endpoint.
+With a remote endpoint, that data leaves the game server. Operators must evaluate their provider,
+retention agreement, player notice/consent, and applicable privacy rules before enabling it; use a
+trusted local endpoint when remote processing is not acceptable. Provider error bodies and API
+keys are never written to moderation logs.
+
 ## Enabling Anthropic
 
 Keep the key outside checked-in configuration:

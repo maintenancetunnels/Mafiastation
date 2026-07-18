@@ -6,6 +6,11 @@ HTN root tasks or game-rule prototypes; the model may return one exact ID or `no
 then independently validates the JSON, allowlist membership, confidence, prototype existence, and
 target state.
 
+Autonomous NPC mode sends the configured persona, current/recent HTN goals, and a bounded window
+of nearby speaker names and IC speech to the configured endpoint. With a remote endpoint, that
+data leaves the game server; apply the same player-notice, provider-retention, consent, and privacy
+review described in the moderation README.
+
 Enable the shared gateway, then:
 
 ```toml
