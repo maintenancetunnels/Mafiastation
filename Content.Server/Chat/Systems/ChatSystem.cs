@@ -11,6 +11,7 @@ using Content.Server.Nyanotrasen.Chat;
 using Content.Server.Speech.Components; // DeltaV
 using Content.Server.Speech.Prototypes;
 using Content.Server.Station.Systems;
+using Content.Server._ForkStation.Moderation;
 using Content.Shared.ActionBlocker;
 using Content.Shared.Administration;
 using Content.Shared.CCVar;
@@ -756,6 +757,13 @@ public sealed partial class ChatSystem : SharedChatSystem
 
         SendInVoiceRange(ChatChannel.LOOC, message, wrappedMessage, source, hideChat ? ChatTransmitRange.HideChat : ChatTransmitRange.Normal, player.UserId);
         _adminLogger.Add(LogType.Chat, LogImpact.Low, $"LOOC from {source}: {message}");
+        RaiseLocalEvent(new ModerationChatMessageEvent(
+            ModerationMessageKind.Looc,
+            Identity.Name(source, EntityManager),
+            player.Name,
+            player.UserId.ToString(),
+            message,
+            source));
     }
 
     private void SendDeadChat(EntityUid source, ICommonSession player, string message, bool hideChat)
@@ -781,6 +789,13 @@ public sealed partial class ChatSystem : SharedChatSystem
         }
 
         _chatManager.ChatMessageToMany(ChatChannel.Dead, message, wrappedMessage, source, hideChat, true, clients.ToList(), author: player.UserId);
+        RaiseLocalEvent(new ModerationChatMessageEvent(
+            ModerationMessageKind.Dead,
+            playerName,
+            player.Name,
+            player.UserId.ToString(),
+            message,
+            source));
     }
     #endregion
 

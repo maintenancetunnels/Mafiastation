@@ -8,6 +8,7 @@ using Content.Server.Discord.DiscordLink;
 using Content.Server.Ghost;
 using Content.Server.Players.RateLimiting;
 using Content.Server.Preferences.Managers;
+using Content.Server._ForkStation.Moderation;
 using Content.Shared.Administration;
 using Content.Shared.CCVar;
 using Content.Shared.Chat;
@@ -308,6 +309,15 @@ internal sealed partial class ChatManager : IChatManager
         ChatMessageToAll(ChatChannel.OOC, message, wrappedMessage, EntityUid.Invalid, hideChat: false, recordReplay: true, colorOverride: colorOverride, author: player.UserId);
         _discordLink.SendMessage(message, player.Name, ChatChannel.OOC);
         _adminLogger.Add(LogType.Chat, LogImpact.Low, $"OOC from {player:Player}: {message}");
+        _entityManager.EventBus.RaiseEvent(
+            EventSource.Local,
+            new ModerationChatMessageEvent(
+                ModerationMessageKind.Ooc,
+                player.Name,
+                player.Name,
+                player.UserId.ToString(),
+                message,
+                EntityUid.Invalid));
     }
 
     private void SendAdminChat(ICommonSession player, string message)
