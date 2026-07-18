@@ -1,0 +1,36 @@
+# Mafiastation horror events. Nested into the upstream event pools via
+# MafiastationCalmEventsTable / MafiastationAntagEventsTable (see GameRules/events.yml).
+
+- type: entityTable
+  id: MafiastationCalmEventsTable
+  table: !type:AllSelector
+    children:
+    - id: LiminalFlicker
+
+- type: entityTable
+  id: MafiastationAntagEventsTable
+  table: !type:AllSelector
+    children:
+    - id: BlackoutHunt
+
+# Lights across the station flicker for a while. No announcement, no explanation.
+- type: entity
+  parent: BaseStationEventShortDelay
+  id: LiminalFlicker
+  components:
+  - type: StationEvent
+    weight: 8
+    duration: 45
+    maxDuration: 90
+  - type: LiminalFlickerRule
+
+# Total blackout + something hunting in the dark. No announcement: the power just dies.
+- type: entity
+  parent: BaseStationEventLongDelay
+  id: BlackoutHunt
+  components:
+  - type: StationEvent
+    weight: 5
+    duration: 90
+    maxDuration: 150
+  - type: BlackoutHuntRule

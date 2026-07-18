@@ -8,7 +8,17 @@
 mob_pushing = true
 
 [game]
+# Lobby must be ON for defaultpreset to apply: with the lobby disabled the ticker
+# hard-codes sandbox (GameTicker.GamePreset.cs). Production behavior = lobby on.
+lobbyenabled = true
+# The flagship round type: social-deduction paranoia with the horror event pool.
+defaultpreset = "Mafiastation"
 # Persistent Prisoner system (see docs/design/PersistentPrisoners.md).
 persistent_prisoner = true
 persistent_prisoner_decay = true
 persistent_prisoner_decay_hours = 48.0
+
+[events]
+# Station events on (the dev build preset turns them off) — the horror pool
+# (LiminalFlicker, BlackoutHunt) fires through the event scheduler.
+enabled = true

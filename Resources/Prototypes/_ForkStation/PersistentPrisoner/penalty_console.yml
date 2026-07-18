@@ -24,7 +24,7 @@
     - map: ["computerLayerKeyboard"]
       state: generic_keyboard
     - map: ["computerLayerScreen"]
-      state: criminal_records
+      state: security
     - map: ["computerLayerKeys"]
       state: security_key
   - type: PointLight
@@ -44,7 +44,7 @@
   - type: MachineBoard
     prototype: ComputerPenaltyConsole
     stackRequirements:
-      MatterBin: 2
+      Manipulator: 2
       Cable: 5
   - type: Sprite
     sprite: Objects/Misc/module.rsi

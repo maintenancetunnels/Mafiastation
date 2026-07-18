@@ -1,0 +1,18 @@
+# Mafiastation: social-deduction paranoia rounds. Traitors may or may not exist
+# (DummyNonAntagChance keeps "no wolf" rounds on the table, like classic mafia/werewolf),
+# and the station itself turns hostile via the ramping event scheduler — which now
+# includes the horror pool (LiminalFlicker, BlackoutHunt).
+- type: gamePreset
+  id: Mafiastation
+  alias:
+    - mafiastation
+    - mafia
+    - paranoia
+  name: mafiastation-title
+  description: mafiastation-description
+  showInVote: true
+  rules:
+  - DummyNonAntagChance
+  - Traitor
+  - RampingStationEventScheduler
+  - BasicRoundstartVariation

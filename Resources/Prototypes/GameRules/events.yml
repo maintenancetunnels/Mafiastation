@@ -4,6 +4,8 @@
     children:
     - !type:NestedSelector # DeltaV
       tableId: BasicCalmEventsTableDeltaV
+    - !type:NestedSelector # _ForkStation
+      tableId: MafiastationCalmEventsTable
     - id: AnomalySpawn
     - id: BluespaceArtifact
     - id: BluespaceLocker
@@ -33,6 +35,8 @@
     children:
     - !type:NestedSelector # DeltaV
       tableId: BasicAntagEventsTableDeltaV
+    - !type:NestedSelector # _ForkStation
+      tableId: MafiastationAntagEventsTable
     - id: DragonSpawn
     - id: ColossusSpawn # DeltaV
     #- id: ClosetSkeleton # DeltaV - replaced with MenaceSkeleton

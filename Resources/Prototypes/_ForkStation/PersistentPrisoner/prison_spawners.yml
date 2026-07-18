@@ -25,9 +25,9 @@
   components:
   - type: Sprite
     layers:
-      - state: orange
+      - state: pink
       - sprite: Markers/cross.rsi
-        state: cross
+        state: decal
   - type: RandomSpawner
     chance: 0.25
     offset: 0.2

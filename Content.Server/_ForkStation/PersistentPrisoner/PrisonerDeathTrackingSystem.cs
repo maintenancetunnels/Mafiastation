@@ -33,7 +33,9 @@ public sealed class PrisonerDeathTrackingSystem : EntitySystem
     public override void Initialize()
     {
         base.Initialize();
-        SubscribeLocalEvent<MobStateComponent, MobStateChangedEvent>(OnMobStateChanged);
+        // Broadcast subscription: the directed (MobStateComponent, MobStateChangedEvent) slot
+        // is owned by upstream SharedStunSystem — the engine allows only one directed sub per pair.
+        SubscribeLocalEvent<MobStateChangedEvent>(OnMobStateChanged);
         SubscribeLocalEvent<RoundStartingEvent>(OnRoundStarting);
     }
 
@@ -42,10 +44,12 @@ public sealed class PrisonerDeathTrackingSystem : EntitySystem
         _diedThisRound.Clear();
     }
 
-    private void OnMobStateChanged(EntityUid uid, MobStateComponent component, ref MobStateChangedEvent args)
+    private void OnMobStateChanged(MobStateChangedEvent args)
     {
         if (args.NewMobState != MobState.Dead)
             return;
+
+        var uid = args.Target;
 
         // Get the mind/player behind this entity
         if (!_mind.TryGetMind(uid, out var mindId, out var mind))

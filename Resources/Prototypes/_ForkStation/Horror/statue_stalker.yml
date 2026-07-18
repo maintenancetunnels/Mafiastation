@@ -1,0 +1,36 @@
+# The Statue: a weeping-angel-style hunter. Frozen while any living player can see it;
+# terrifyingly fast when nobody can. Spawned by the BlackoutHunt event, removed when it ends.
+# Placeholder sprite (decorative statue) until the dedicated statue_stalker.rsi asset lands.
+- type: entity
+  id: MobStatueStalker
+  name: strange statue
+  description: A weather-worn stone figure. You don't remember it being there.
+  components:
+  - type: StatueStalker
+  - type: Sprite
+    sprite: Structures/Decoration/statues.rsi
+    state: venus_blue
+    noRot: true
+    drawdepth: Mobs
+  - type: Physics
+    bodyType: Dynamic
+    fixedRotation: true
+  - type: Fixtures
+    fixtures:
+      fix1:
+        shape:
+          !type:PhysShapeCircle
+          radius: 0.35
+        density: 400
+        mask:
+        - MobMask
+        layer:
+        - MobLayer
+  - type: Clickable
+  - type: InteractionOutline
+  - type: Appearance
+  - type: NameIdentifier
+    group: GenericNumber
+  - type: Tag
+    tags:
+    - Unimplantable
