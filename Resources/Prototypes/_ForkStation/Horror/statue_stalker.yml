@@ -29,6 +29,11 @@
   - type: Clickable
   - type: InteractionOutline
   - type: Appearance
+  - type: AmbientSound
+    volume: -7
+    range: 7
+    sound:
+      path: /Audio/Ambience/spookyspace1.ogg
   - type: NameIdentifier
     group: GenericNumber
   - type: Tag

@@ -33,4 +33,8 @@
     weight: 5
     duration: 90
     maxDuration: 150
+    startAudio:
+      path: /Audio/Ambience/spookyspace2.ogg
+      params:
+        volume: -4
   - type: BlackoutHuntRule
