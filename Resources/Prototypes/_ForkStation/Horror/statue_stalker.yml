@@ -39,3 +39,4 @@
   - type: Tag
     tags:
     - Unimplantable
+    - DoorBumpOpener # doors swing open for it in the dark

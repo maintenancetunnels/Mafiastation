@@ -58,6 +58,20 @@ public sealed partial class StatueStalkerComponent : Component
     public SoundSpecifier AttackSound = new SoundPathSpecifier("/Audio/Weapons/smash.ogg");
 
     /// <summary>
+    /// Stone-grinding sound played when it starts moving after being watched.
+    /// </summary>
+    [DataField]
+    public SoundSpecifier MoveSound = new SoundPathSpecifier("/Audio/Effects/stonedoor_openclose.ogg");
+
+    /// <summary>
+    /// Minimum time between move-sound plays, to avoid spam at observation boundaries.
+    /// </summary>
+    [DataField]
+    public TimeSpan MoveSoundCooldown = TimeSpan.FromSeconds(4);
+
+    public TimeSpan NextMoveSound = TimeSpan.Zero;
+
+    /// <summary>
     /// Whether the stalker was observed last tick (used to gate movement).
     /// </summary>
     public bool Observed;

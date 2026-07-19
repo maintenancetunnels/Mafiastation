@@ -6,6 +6,9 @@
   table: !type:AllSelector
     children:
     - id: LiminalFlicker
+    - id: PhantomAnnouncement
+    - id: WhisperEvent
+    - id: Doppelganger
 
 - type: entityTable
   id: MafiastationAntagEventsTable
@@ -23,6 +26,39 @@
     duration: 45
     maxDuration: 90
   - type: LiminalFlickerRule
+
+# The announcer lies: one official-sounding announcement that is subtly wrong.
+- type: entity
+  parent: BaseStationEventShortDelay
+  id: PhantomAnnouncement
+  components:
+  - type: StationEvent
+    weight: 8
+    duration: 1
+  - type: PhantomAnnouncementRule
+
+# Random crew members receive whispers nobody sent. Sometimes the whisper knows their name.
+- type: entity
+  parent: BaseStationEventShortDelay
+  id: WhisperEvent
+  components:
+  - type: StationEvent
+    weight: 6
+    duration: 60
+    maxDuration: 120
+  - type: WhisperRule
+
+# A motionless, naked copy of a random crew member stands in maintenance.
+# It crumbles to ash when approached. Nobody believes the witness.
+- type: entity
+  parent: BaseStationEventLongDelay
+  id: Doppelganger
+  components:
+  - type: StationEvent
+    weight: 5
+    duration: 300
+    maxDuration: 480
+  - type: DoppelgangerRule
 
 # Total blackout + something hunting in the dark. No announcement: the power just dies.
 - type: entity

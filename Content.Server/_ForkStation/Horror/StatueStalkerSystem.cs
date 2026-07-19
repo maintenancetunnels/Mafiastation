@@ -128,6 +128,13 @@ public sealed class StatueStalkerSystem : EntitySystem
             if (length < 0.01f)
                 continue;
 
+            // Stone grinding on stone: they hear it start moving before they see it.
+            if (_timing.CurTime >= stalker.NextMoveSound)
+            {
+                _audio.PlayPvs(stalker.MoveSound, uid);
+                stalker.NextMoveSound = _timing.CurTime + stalker.MoveSoundCooldown;
+            }
+
             _physics.SetLinearVelocity(uid, direction / length * stalker.MoveSpeed, body: physics);
         }
     }
