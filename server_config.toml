@@ -22,3 +22,8 @@ persistent_prisoner_decay_hours = 48.0
 # Station events on (the dev build preset turns them off) — the horror pool
 # (LiminalFlicker, BlackoutHunt) fires through the event scheduler.
 enabled = true
+
+[mafiastation]
+# The station has a basement. Nobody built it. It was always there.
+basement_enabled = true
+basement_grid = "/Maps/Ruins/ruined_prison_ship.yml"

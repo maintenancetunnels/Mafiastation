@@ -1,0 +1,22 @@
+# Stairwell pair connecting the station to its basement. Linked in code by BasementSystem.
+# These are portals: anything that collides goes through — including things hunting you.
+- type: entity
+  id: StairwellDown
+  parent: BasePortal
+  name: stairwell
+  description: Stairs leading down into the dark. It's quiet down there.
+  components:
+  - type: Sprite
+    sprite: Structures/stairs.rsi
+    layers:
+    - state: stairs_dark
+  - type: Portal
+    arrivalSound: /Audio/Effects/stonedoor_openclose.ogg
+    departureSound: /Audio/Effects/stonedoor_openclose.ogg
+    canTeleportToOtherMaps: false
+
+- type: entity
+  id: StairwellUp
+  parent: StairwellDown
+  name: stairwell
+  description: Stairs leading up. The light at the top seems very far away.
