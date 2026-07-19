@@ -9,9 +9,17 @@
   - type: StatueStalker
   - type: Sprite
     sprite: _ForkStation/Mobs/statue_stalker.rsi
-    state: statue
     noRot: true
     drawdepth: Mobs
+    layers:
+    - state: statue
+      map: ["base"]
+  - type: GenericVisualizer
+    visuals:
+      enum.StatueStalkerVisuals.Moving:
+        base:
+          True: { state: statue_moving }
+          False: { state: statue }
   - type: Physics
     bodyType: Dynamic
     fixedRotation: true

@@ -72,6 +72,11 @@ public sealed partial class StatueStalkerComponent : Component
     public TimeSpan NextMoveSound = TimeSpan.Zero;
 
     /// <summary>
+    /// Whether it was moving last scan, for appearance updates.
+    /// </summary>
+    public bool WasMoving;
+
+    /// <summary>
     /// Whether the stalker was observed last tick (used to gate movement).
     /// </summary>
     public bool Observed;

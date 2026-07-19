@@ -1,5 +1,6 @@
 using System.Numerics;
 using Content.Server.Examine;
+using Content.Shared._ForkStation.Horror;
 using Content.Shared.Damage;
 using Content.Shared.Damage.Systems;
 using Content.Shared.Mobs;
@@ -23,6 +24,7 @@ public sealed class StatueStalkerSystem : EntitySystem
     [Dependency] private readonly SharedPhysicsSystem _physics = default!;
     [Dependency] private readonly SharedTransformSystem _transform = default!;
     [Dependency] private readonly DamageableSystem _damageable = default!;
+    [Dependency] private readonly SharedAppearanceSystem _appearance = default!;
     [Dependency] private readonly SharedAudioSystem _audio = default!;
     [Dependency] private readonly IPlayerManager _players = default!;
     [Dependency] private readonly IGameTiming _timing = default!;
@@ -85,6 +87,7 @@ public sealed class StatueStalkerSystem : EntitySystem
             if (observed)
             {
                 _physics.SetLinearVelocity(uid, Vector2.Zero, body: physics);
+                SetMoving(uid, stalker, false);
                 continue;
             }
 
@@ -106,12 +109,14 @@ public sealed class StatueStalkerSystem : EntitySystem
             if (prey == null)
             {
                 _physics.SetLinearVelocity(uid, Vector2.Zero, body: physics);
+                SetMoving(uid, stalker, false);
                 continue;
             }
 
             if (bestDist <= stalker.AttackRange)
             {
                 _physics.SetLinearVelocity(uid, Vector2.Zero, body: physics);
+                SetMoving(uid, stalker, false);
 
                 if (_timing.CurTime >= stalker.NextAttack)
                 {
@@ -136,6 +141,16 @@ public sealed class StatueStalkerSystem : EntitySystem
             }
 
             _physics.SetLinearVelocity(uid, direction / length * stalker.MoveSpeed, body: physics);
+            SetMoving(uid, stalker, true);
         }
+    }
+
+    private void SetMoving(EntityUid uid, StatueStalkerComponent stalker, bool moving)
+    {
+        if (stalker.WasMoving == moving)
+            return;
+
+        stalker.WasMoving = moving;
+        _appearance.SetData(uid, StatueStalkerVisuals.Moving, moving);
     }
 }

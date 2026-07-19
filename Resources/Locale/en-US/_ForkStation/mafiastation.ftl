@@ -19,6 +19,18 @@ mafiastation-whisper-4 = ...we can see you...
 mafiastation-whisper-5 = ...the lights lie...
 mafiastation-whisper-name = ...{$name}... {$name}... come find us...
 
+# Crew accusation votes — the emergency meeting.
+mafiastation-accuse-title = Crew accusation: is {$target} a threat to this station?
+mafiastation-accuse-yes = Suspect
+mafiastation-accuse-no = Innocent
+mafiastation-accuse-passed = By crew consensus, {$target} has been designated SUSPECT. Cooperation with security is expected.
+mafiastation-accuse-sender = Crew Consensus
+mafiastation-accuse-reason = Designated suspect by crew accusation vote
+mafiastation-accuse-once = You have already called an accusation this shift.
+mafiastation-accuse-self = You cannot accuse yourself. Bold, though.
+mafiastation-accuse-no-target = No living crew member by that name.
+mafiastation-accuse-dead = The dead cannot accuse.
+
 # Round-end paranoia report. The station never says what it was. Only how many.
 mafiastation-roundend-header = [color=#8a7f9e]Post-shift anomalous activity summary:[/color]
 mafiastation-roundend-whispers = [color=#8a7f9e]{$count} transmissions were received that were never sent.[/color]
