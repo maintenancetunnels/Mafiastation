@@ -75,6 +75,73 @@ public sealed partial class CCVars
     public static readonly CVarDef<bool> MafiaModerationAllowAutomaticActions =
         CVarDef.Create("mafia.moderation.allow_automatic_actions", false, CVar.SERVERONLY);
 
+    /// <summary>Operator-controlled classifier/prompt policy label recorded with new incidents.</summary>
+    public static readonly CVarDef<string> MafiaModerationPolicyVersion =
+        CVarDef.Create("mafia.moderation.policy_version", "v1", CVar.SERVERONLY);
+
+    /// <summary>Relative path beneath server user data for human incident-review labels.</summary>
+    public static readonly CVarDef<string> MafiaModerationReviewPath =
+        CVarDef.Create("mafia.moderation.review_path", "moderation_reviews.json", CVar.SERVERONLY);
+
+    /// <summary>Local headless-client bridge. Deliberately not archived between client runs.</summary>
+    public static readonly CVarDef<bool> MafiaAiPilotClientEnabled =
+        CVarDef.Create("mafia.ai_pilot.client_enabled", false, CVar.CLIENTONLY);
+
+    /// <summary>Current-user Windows named-pipe name used by one explicitly enabled client.</summary>
+    public static readonly CVarDef<string> MafiaAiPilotPipeName =
+        CVarDef.Create("mafia.ai_pilot.pipe_name", "mafiastation-pilot-1", CVar.CLIENTONLY);
+
+    /// <summary>Independent client-side opt-in required before model/player-pilot speech.</summary>
+    public static readonly CVarDef<bool> MafiaAiPilotClientAllowSpeech =
+        CVarDef.Create("mafia.ai_pilot.client_allow_speech", false, CVar.CLIENTONLY);
+
+    /// <summary>Master server gate for local AI player-pilot experiments.</summary>
+    public static readonly CVarDef<bool> MafiaAiPilotServerEnabled =
+        CVarDef.Create("mafia.ai_pilot.server_enabled", false, CVar.SERVERONLY);
+
+    /// <summary>Comma-separated account names or user IDs; empty denies every account.</summary>
+    public static readonly CVarDef<string> MafiaAiPilotAllowedAccounts =
+        CVarDef.Create("mafia.ai_pilot.allowed_accounts", string.Empty, CVar.SERVERONLY);
+
+    /// <summary>Independent server gate for lobby readiness and late joining.</summary>
+    public static readonly CVarDef<bool> MafiaAiPilotAllowJoin =
+        CVarDef.Create("mafia.ai_pilot.allow_join", false, CVar.SERVERONLY);
+
+    /// <summary>Comma-separated job prototype IDs the pilot may request when late joining.</summary>
+    public static readonly CVarDef<string> MafiaAiPilotAllowedJobs =
+        CVarDef.Create("mafia.ai_pilot.allowed_jobs", "Passenger", CVar.SERVERONLY);
+
+    public static readonly CVarDef<string> MafiaAiPilotDefaultJob =
+        CVarDef.Create("mafia.ai_pilot.default_job", "Passenger", CVar.SERVERONLY);
+
+    /// <summary>Independent server gate for pilot speech; messages still use normal chat checks.</summary>
+    public static readonly CVarDef<bool> MafiaAiPilotAllowSpeech =
+        CVarDef.Create("mafia.ai_pilot.allow_speech", false, CVar.SERVERONLY);
+
+    public static readonly CVarDef<int> MafiaAiPilotSpeechMaxCharacters =
+        CVarDef.Create("mafia.ai_pilot.speech_max_characters", 160, CVar.SERVERONLY);
+
+    public static readonly CVarDef<float> MafiaAiPilotSpeechCooldownSeconds =
+        CVarDef.Create("mafia.ai_pilot.speech_cooldown_seconds", 5f, CVar.SERVERONLY);
+
+    public static readonly CVarDef<float> MafiaAiPilotObservationRadius =
+        CVarDef.Create("mafia.ai_pilot.observation_radius", 12f, CVar.SERVERONLY);
+
+    public static readonly CVarDef<int> MafiaAiPilotMaximumObservedEntities =
+        CVarDef.Create("mafia.ai_pilot.maximum_observed_entities", 48, CVar.SERVERONLY);
+
+    public static readonly CVarDef<float> MafiaAiPilotMaximumGoalDistance =
+        CVarDef.Create("mafia.ai_pilot.maximum_goal_distance", 20f, CVar.SERVERONLY);
+
+    public static readonly CVarDef<int> MafiaAiPilotMaximumPathWaypoints =
+        CVarDef.Create("mafia.ai_pilot.maximum_path_waypoints", 64, CVar.SERVERONLY);
+
+    public static readonly CVarDef<float> MafiaAiPilotGoalTimeoutSeconds =
+        CVarDef.Create("mafia.ai_pilot.goal_timeout_seconds", 45f, CVar.SERVERONLY);
+
+    public static readonly CVarDef<int> MafiaAiPilotServerRequestsPerSecond =
+        CVarDef.Create("mafia.ai_pilot.requests_per_second", 4, CVar.SERVERONLY);
+
     /// <summary>Enables admin-triggered, allowlist-only NPC and event choice requests.</summary>
     public static readonly CVarDef<bool> MafiaDirectorEnabled =
         CVarDef.Create("mafia.director.enabled", false, CVar.SERVERONLY);

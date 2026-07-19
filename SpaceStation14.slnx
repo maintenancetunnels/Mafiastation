@@ -41,6 +41,8 @@
   <Project Path="Content.Tools/Content.Tools.csproj" />
   <Project Path="Content.YAMLLinter/Content.YAMLLinter.csproj" />
   <Project Path="Pow3r/Pow3r.csproj" />
+  <Project Path="Tools/AiPilotLab/AiPilotLab.csproj" />
+  <Project Path="Tools/AiPilotLab.Tests/AiPilotLab.Tests.csproj" />
   <Folder Name="/RobustToolbox/.github/workflows/">
     <File Path="RobustToolbox/.github/workflows/benchmarks.yml" />
     <File Path="RobustToolbox/.github/workflows/build-all-configurations.yml" />

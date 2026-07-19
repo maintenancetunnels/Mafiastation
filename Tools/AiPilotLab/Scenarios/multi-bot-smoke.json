@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "name": "multi-bot-smoke",
+  "timeoutSeconds": 120,
+  "bots": [
+    {
+      "name": "alpha",
+      "pipe": "mafiastation-pilot-1",
+      "username": "PilotAlpha"
+    },
+    {
+      "name": "beta",
+      "pipe": "mafiastation-pilot-2",
+      "username": "PilotBeta"
+    }
+  ],
+  "steps": [
+    {
+      "action": "status",
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "action": "join",
+      "until": true,
+      "pollMs": 500,
+      "timeoutSeconds": 40,
+      "expect": {
+        "ok": true,
+        "data.accepted": true
+      }
+    },
+    {
+      "action": "observe",
+      "until": true,
+      "pollMs": 500,
+      "timeoutSeconds": 30,
+      "expect": {
+        "ok": true,
+        "data.attached": true
+      }
+    },
+    {
+      "bot": "alpha",
+      "action": "goal",
+      "arguments": {
+        "kind": "move_relative",
+        "x": 2,
+        "y": 0,
+        "range": 0.6
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "bot": "beta",
+      "action": "goal",
+      "arguments": {
+        "kind": "move_relative",
+        "x": -2,
+        "y": 0,
+        "range": 0.6
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "action": "goal_status",
+      "until": true,
+      "pollMs": 250,
+      "timeoutSeconds": 30,
+      "expect": {
+        "ok": true,
+        "data.state": "completed"
+      }
+    },
+    {
+      "action": "stop",
+      "expect": {
+        "ok": true
+      }
+    }
+  ]
+}

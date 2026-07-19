@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "name": "basic-movement",
+  "timeoutSeconds": 90,
+  "bots": [
+    {
+      "name": "pilot1",
+      "pipe": "mafiastation-pilot-1",
+      "username": "Pilot1"
+    }
+  ],
+  "steps": [
+    {
+      "name": "bridge-ready",
+      "action": "status",
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "name": "join-round",
+      "action": "join",
+      "until": true,
+      "pollMs": 500,
+      "timeoutSeconds": 30,
+      "expect": {
+        "ok": true,
+        "data.accepted": true
+      }
+    },
+    {
+      "name": "attached-to-character",
+      "action": "observe",
+      "until": true,
+      "pollMs": 500,
+      "timeoutSeconds": 30,
+      "expect": {
+        "ok": true,
+        "data.attached": true
+      }
+    },
+    {
+      "name": "bounded-east-input",
+      "action": "move",
+      "arguments": {
+        "direction": "east",
+        "durationMs": 350
+      },
+      "expect": {
+        "ok": true
+      },
+      "delayAfterMs": 250
+    },
+    {
+      "name": "deterministic-relative-goal",
+      "action": "goal",
+      "arguments": {
+        "kind": "move_relative",
+        "x": 2,
+        "y": 0,
+        "range": 0.6
+      },
+      "expect": {
+        "ok": true,
+        "data.accepted": true
+      }
+    },
+    {
+      "name": "goal-completes",
+      "action": "goal_status",
+      "until": true,
+      "pollMs": 250,
+      "timeoutSeconds": 30,
+      "expect": {
+        "ok": true,
+        "data.state": "completed"
+      }
+    },
+    {
+      "name": "release-inputs",
+      "action": "stop",
+      "expect": {
+        "ok": true
+      }
+    }
+  ]
+}
