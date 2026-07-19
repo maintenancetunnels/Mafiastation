@@ -73,6 +73,7 @@ public sealed class DoppelgangerSystem : EntitySystem
             RaiseLocalEvent(lightUid, boo);
         }
 
+        EntityManager.System<ParanoiaTrackerSystem>().Sightings++;
         QueueDel(uid);
     }
 }

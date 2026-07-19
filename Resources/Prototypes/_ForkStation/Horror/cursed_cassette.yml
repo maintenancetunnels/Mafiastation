@@ -1,0 +1,14 @@
+# A cassette player that whispers to whoever carries it. Found where it shouldn't be.
+- type: entity
+  id: CursedCassettePlayer
+  parent: BaseItem
+  name: warped cassette player
+  description: The tape inside has no label. It is always mid-song. There is no song.
+  components:
+  - type: CursedCassette
+  - type: Sprite
+    sprite: _DV/Objects/Devices/tape_recorder.rsi
+    state: playing
+  - type: Item
+    sprite: _DV/Objects/Devices/tape_recorder.rsi
+    heldPrefix: idle

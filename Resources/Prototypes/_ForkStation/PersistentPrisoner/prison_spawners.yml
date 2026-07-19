@@ -50,6 +50,7 @@
       - DoubleEmergencyOxygenTankFilled
       - ToolboxMechanicalFilled
       - CableApcStack
+      - CursedCassettePlayer
     rareChance: 0.15
 
 # NOTE: the EE version had a PrisonSecurityBotSpawner (MobDisablerBot/MobBatonBot).

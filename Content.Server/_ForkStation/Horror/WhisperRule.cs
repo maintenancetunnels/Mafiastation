@@ -63,5 +63,7 @@ public sealed class WhisperRule : StationEventSystem<WhisperRuleComponent>
         var wrapped = $"[color=#8a7f9e][italic]{message}[/italic][/color]";
         _chatManager.ChatMessageToOne(ChatChannel.Whisper, message, wrapped,
             source: EntityUid.Invalid, hideChat: false, client: victim.Channel);
+
+        EntityManager.System<ParanoiaTrackerSystem>().WhispersSent++;
     }
 }
