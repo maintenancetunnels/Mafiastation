@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "license": "CC-BY-SA-3.0",
+  "copyright": "Derived for Mafiastation from Structures/Decoration/statues.rsi state venus_blue (originally https://github.com/tgstation/tgstation/commit/2bb568bf2beddeee5f1f28cbc1e15bdcfb2e2cb0), desaturated and darkened.",
+  "size": {
+    "x": 32,
+    "y": 64
+  },
+  "states": [
+    { "name": "statue" },
+    { "name": "statue_moving" }
+  ]
+}

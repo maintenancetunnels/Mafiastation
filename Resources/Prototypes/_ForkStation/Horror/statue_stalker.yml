@@ -1,6 +1,6 @@
 # The Statue: a weeping-angel-style hunter. Frozen while any living player can see it;
 # terrifyingly fast when nobody can. Spawned by the BlackoutHunt event, removed when it ends.
-# Placeholder sprite (decorative statue) until the dedicated statue_stalker.rsi asset lands.
+# Sprite: _ForkStation derivative of the in-repo tg statue (see the RSI's meta.json).
 - type: entity
   id: MobStatueStalker
   name: strange statue
@@ -8,8 +8,8 @@
   components:
   - type: StatueStalker
   - type: Sprite
-    sprite: Structures/Decoration/statues.rsi
-    state: venus_blue
+    sprite: _ForkStation/Mobs/statue_stalker.rsi
+    state: statue
     noRot: true
     drawdepth: Mobs
   - type: Physics
