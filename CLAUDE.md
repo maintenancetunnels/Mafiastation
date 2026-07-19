@@ -7,8 +7,9 @@ admin micromanagement.
 
 ## Hard rules
 
-- **NEVER push to `origin`** — it is the upstream DeltaV-Station repo. All work stays local on
-  branch `mafiastation`.
+- **NEVER push to `origin`** — it is the upstream DeltaV-Station repo. Our published home is
+  the `github` remote (https://github.com/maintenancetunnels/Mafiastation, default branch
+  `mafiastation`) — push there.
 - Build with the user-local .NET 10 SDK: `%LOCALAPPDATA%\Microsoft\dotnet\dotnet.exe`
   (system dotnet is 9 and will fail on global.json).
 - Custom code lives in `Content.*/_ForkStation/` and `Resources/Prototypes/_ForkStation/`.

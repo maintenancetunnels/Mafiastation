@@ -5,7 +5,8 @@ SCP/unfiction horror + Persistent Prisoner self-regulation + LLM moderation.
 
 ## Hard rules
 
-- **NEVER push to `origin`** (upstream DeltaV-Station repo). Work stays local on `mafiastation`.
+- **NEVER push to `origin`** (upstream DeltaV-Station repo). Our published home is the `github`
+  remote (https://github.com/maintenancetunnels/Mafiastation) — push `mafiastation` there.
 - Build with `%LOCALAPPDATA%\Microsoft\dotnet\dotnet.exe` (.NET 10; system dotnet is too old).
 - Custom code goes in `Content.*/_ForkStation/`; claim any upstream file on the bus before editing.
 - Upstream tree is CRLF, most `_ForkStation` files LF — match the file.
