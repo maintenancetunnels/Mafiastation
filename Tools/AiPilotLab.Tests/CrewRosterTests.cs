@@ -17,6 +17,8 @@ public sealed class CrewRosterTests
             Assert.That(goal, Does.Contain("normal janitor"));
             Assert.That(goal, Does.Contain("no access to hidden roles"));
             Assert.That(goal, Does.Contain("concrete in-character events"));
+            Assert.That(goal, Does.Contain("Help the station feel inhabited"));
+            Assert.That(goal, Does.Contain("common radio"));
             Assert.That(goal, Does.Not.Contain(agent.Username));
             Assert.That(goal, Does.Not.Contain(agent.Pipe));
         });
@@ -124,6 +126,10 @@ public sealed class CrewRosterTests
             Assert.That(silent, Does.Not.Contain(", say"));
             Assert.That(speaking, Does.Contain(", say"));
             Assert.That(speaking, Does.Contain("recentSpeech"));
+            Assert.That(speaking, Does.Contain("local|radio"));
+            Assert.That(speaking, Does.Contain("station-wide job coordination"));
+            Assert.That(speaking, Does.Contain("30-45 seconds"));
+            Assert.That(speaking, Does.Contain("Do not speak on consecutive decisions"));
         });
     }
 

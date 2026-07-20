@@ -55,6 +55,8 @@ public sealed partial class AiPilotBridgeSystem
     private readonly Queue<PilotObservedSpeech> _recentSpeech = new();
     private ChatUIController? _chatController;
     private EntityUid? _speechOwner;
+    private TimeSpan? _lastSpokeAt;
+    private string? _lastSpeechChannel;
     private ActivePilotGoal? _goal;
     private TimeSpan _manualMoveDeadline;
     private int _nextObservedId;
@@ -276,6 +278,7 @@ public sealed partial class AiPilotBridgeSystem
                     goal = BuildGoalStatus(),
                     entities = Array.Empty<object>(),
                     recentSpeech = Array.Empty<object>(),
+                    speech = BuildSpeechState(),
                 });
         }
 
@@ -384,6 +387,7 @@ public sealed partial class AiPilotBridgeSystem
                     memory.Message,
                     memory.Channel,
                 }).ToArray(),
+                speech = BuildSpeechState(),
             });
     }
 
@@ -392,8 +396,26 @@ public sealed partial class AiPilotBridgeSystem
         if (_speechOwner == controlled)
             return;
 
-        _recentSpeech.Clear();
+        ClearSpeechMemory();
         _speechOwner = controlled;
+    }
+
+    private object BuildSpeechState()
+    {
+        int? lastSpokeSecondsAgo = null;
+        if (_lastSpokeAt != null)
+        {
+            lastSpokeSecondsAgo = (int) Math.Clamp(
+                (_timing.CurTime - _lastSpokeAt.Value).TotalSeconds,
+                0,
+                int.MaxValue);
+        }
+
+        return new
+        {
+            lastSpokeSecondsAgo,
+            lastChannel = _lastSpeechChannel,
+        };
     }
 
     private string? GetMobCondition(EntityUid uid)
@@ -413,6 +435,8 @@ public sealed partial class AiPilotBridgeSystem
     {
         _recentSpeech.Clear();
         _speechOwner = null;
+        _lastSpokeAt = null;
+        _lastSpeechChannel = null;
     }
 
     private void PruneObservedSpeech()
@@ -841,22 +865,48 @@ public sealed partial class AiPilotBridgeSystem
         if (!TryReadString(request.Arguments, "text", out var text))
             return AiPilotPipeResponse.Failure(request.Id, "Pilot say requires text.");
         text = text.Trim();
+        var channel = "local";
+        if (request.Arguments.Contains("channel") &&
+            !TryReadString(request.Arguments, "channel", out channel))
+        {
+            return AiPilotPipeResponse.Failure(
+                request.Id,
+                "Pilot say channel must be local or radio.");
+        }
+        channel = channel.Trim().ToLowerInvariant();
+        if (channel is not ("local" or "radio"))
+        {
+            return AiPilotPipeResponse.Failure(
+                request.Id,
+                "Pilot say channel must be local or radio.");
+        }
+
         var maximum = Math.Clamp(_authorization.SpeechMaxCharacters, 1, 500);
         if (text.Length is < 1 || text.Length > maximum ||
             text.StartsWith('/') ||
+            text.StartsWith(SharedChatSystem.RadioCommonPrefix) ||
+            text.StartsWith(SharedChatSystem.RadioChannelPrefix) ||
+            text.StartsWith(SharedChatSystem.RadioChannelAltPrefix) ||
             text.Any(char.IsControl))
         {
             return AiPilotPipeResponse.Failure(
                 request.Id,
-                $"Pilot speech must contain 1-{maximum} non-control characters and cannot begin with '/'.");
+                $"Pilot speech must contain 1-{maximum} non-control characters and cannot begin with a command or radio prefix.");
         }
 
-        _chat.SendMessage(text, ChatSelectChannel.Local);
+        var transmittedText = channel == "radio"
+            ? $"{SharedChatSystem.RadioCommonPrefix}{text}"
+            : text;
+        _chat.SendMessage(
+            transmittedText,
+            channel == "radio" ? ChatSelectChannel.Radio : ChatSelectChannel.Local);
+        _lastSpokeAt = _timing.CurTime;
+        _lastSpeechChannel = channel;
         _nextSpeechAt =
             _timing.CurTime +
             TimeSpan.FromSeconds(
                 Math.Clamp(_authorization.SpeechCooldownSeconds, 0.25f, 60f));
-        return AiPilotPipeResponse.Success(request.Id, new { accepted = true });
+        return AiPilotPipeResponse.Success(request.Id, new { accepted = true, channel });
     }
 
     private void UpdateGoalMovement(ActivePilotGoal goal, TimeSpan now)

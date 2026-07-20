@@ -215,9 +215,30 @@ public sealed class PilotActionValidator
         if (!arguments.TryGetProperty("text", out var textElement) || textElement.ValueKind != JsonValueKind.String)
             return PilotActionValidation.Invalid("Say requires a string text argument.");
         var text = textElement.GetString()?.Trim() ?? string.Empty;
-        if (text.Length is < 1 or > 160 || text.StartsWith('/') || text.Any(char.IsControl))
-            return PilotActionValidation.Invalid("Speech must be 1-160 non-control characters and may not begin with '/'.");
-        return PilotActionValidation.Valid(PilotRequest.Create("say", JsonSerializer.SerializeToElement(new { text })));
+        if (text.Length is < 1 or > 160 ||
+            text.StartsWith('/') ||
+            text.StartsWith(';') ||
+            text.StartsWith(':') ||
+            text.StartsWith('.') ||
+            text.Any(char.IsControl))
+        {
+            return PilotActionValidation.Invalid(
+                "Speech must be 1-160 non-control characters and may not begin with a command or radio prefix.");
+        }
+
+        var channel = "local";
+        if (arguments.TryGetProperty("channel", out var channelElement))
+        {
+            if (channelElement.ValueKind != JsonValueKind.String)
+                return PilotActionValidation.Invalid("Say channel must be local or radio.");
+            channel = channelElement.GetString()?.Trim().ToLowerInvariant() ?? string.Empty;
+        }
+        if (channel is not ("local" or "radio"))
+            return PilotActionValidation.Invalid("Say channel must be local or radio.");
+
+        return PilotActionValidation.Valid(PilotRequest.Create(
+            "say",
+            JsonSerializer.SerializeToElement(new { text, channel })));
     }
 
     private static bool TryGetObservedTarget(

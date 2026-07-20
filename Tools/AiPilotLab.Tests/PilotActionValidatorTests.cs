@@ -80,8 +80,41 @@ public sealed class PilotActionValidatorTests
         });
 
         Assert.That(_validator.Validate(speech, null, false).IsValid, Is.False);
-        Assert.That(_validator.Validate(speech, null, true).IsValid, Is.True);
+        var valid = _validator.Validate(speech, null, true);
+        Assert.That(valid.IsValid, Is.True);
+        Assert.That(valid.Request!.Arguments.GetProperty("channel").GetString(), Is.EqualTo("local"));
         Assert.That(_validator.Validate(command, null, true).IsValid, Is.False);
+    }
+
+    [Test]
+    public void SpeechAllowsOnlyExplicitLocalOrCommonRadioChannels()
+    {
+        var radio = JsonSerializer.SerializeToElement(new
+        {
+            action = "say",
+            arguments = new { text = "Engineering, power is stable.", channel = "RADIO", ignored = true },
+        });
+        var department = JsonSerializer.SerializeToElement(new
+        {
+            action = "say",
+            arguments = new { text = "Status report", channel = "engineering" },
+        });
+        var implicitPrefix = JsonSerializer.SerializeToElement(new
+        {
+            action = "say",
+            arguments = new { text = ";Security to arrivals", channel = "local" },
+        });
+
+        var valid = _validator.Validate(radio, null, true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(valid.IsValid, Is.True);
+            Assert.That(valid.Request!.Arguments.GetProperty("channel").GetString(), Is.EqualTo("radio"));
+            Assert.That(valid.Request.Arguments.TryGetProperty("ignored", out _), Is.False);
+            Assert.That(_validator.Validate(department, null, true).IsValid, Is.False);
+            Assert.That(_validator.Validate(implicitPrefix, null, true).IsValid, Is.False);
+        });
     }
 
     [Test]

@@ -64,7 +64,18 @@ message still passes normal speech blockers, rate limits, length bounds, and mod
 
 When one controlled client says something that another controlled client normally hears, it enters
 the listener's `recentSpeech` on a later observation. The listener can then answer in character.
-Whispers and radio obey normal delivery, so agents do not gain a special coordination channel.
+The model chooses `channel: local` for nearby conversation or `channel: radio` for the normal `;`
+common channel. Prompts encourage common radio for station-wide job coordination, requests, urgent
+warnings, and replies to radio traffic. Incoming whispers are perceived but are not currently an
+outgoing pilot channel. Radio still requires ordinary equipment and obeys normal delivery, so
+agents do not gain a special coordination channel.
+
+Crew prompts deliberately create some ambient life instead of waiting silently for a perfect task.
+Agents greet nearby crew, acknowledge useful calls, ask and answer short job questions, and report
+meaningful starts, completions, delays, needs, and hazards. Their observation includes the age and
+channel of their own last pilot transmission; after roughly 30-45 quiet seconds they may make a
+brief relevant check-in when no urgent physical action is pending. They are also told not to speak
+on consecutive decisions just to fill silence or repeat canned status lines.
 
 ## Supplied roster
 

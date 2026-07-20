@@ -40,4 +40,28 @@ public sealed class LlmPilotPolicyTests
                 false)),
             Throws.ArgumentException.With.Message.Contains("API key"));
     }
+
+    [Test]
+    public void ChatterCueBecomesDueAfterQuietPeriod()
+    {
+        var firstTurn = PilotJsonTests.Response(new
+        {
+            speech = new { lastSpokeSecondsAgo = (int?) null, lastChannel = (string?) null },
+        });
+        var recent = PilotJsonTests.Response(new
+        {
+            speech = new { lastSpokeSecondsAgo = 12, lastChannel = "local" },
+        });
+        var quiet = PilotJsonTests.Response(new
+        {
+            speech = new { lastSpokeSecondsAgo = 45, lastChannel = "radio" },
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(LlmPilotPolicy.IsChatterDue(firstTurn), Is.True);
+            Assert.That(LlmPilotPolicy.IsChatterDue(recent), Is.False);
+            Assert.That(LlmPilotPolicy.IsChatterDue(quiet), Is.True);
+        });
+    }
 }

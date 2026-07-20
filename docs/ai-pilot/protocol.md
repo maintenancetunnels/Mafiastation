@@ -37,7 +37,13 @@ connection.
 | `goal` | Start a deterministic move/interact/pickup goal | Server-validated target or bounded destination |
 | `goal_status` | Read current executor state | Read-only |
 | `stop` | Cancel the goal and release all held input | Always allowed when bridge is enabled |
-| `say` | Speak through normal chat and moderation | Separate client/server gates and rate limit |
+| `say` | Speak locally or over common radio through normal chat and moderation | `channel` is only `local` or `radio`; separate client/server gates and rate limit |
+
+`say` accepts `{"text":"...","channel":"local|radio"}` and defaults to `local` for older
+callers. `radio` is transmitted through the same common-radio `;` path used by a normal player, so
+the character still needs functioning radio equipment and the message obeys ordinary delivery.
+Free-form prefixes and department-channel names are rejected; models cannot use `say` to select an
+unreviewed chat surface.
 
 Goal kinds are `move_relative`, `move_to`, `move_to_entity`, `interact`, and `pickup`. The server
 path planner returns coordinates, but the connected client traverses them by producing ordinary
@@ -62,6 +68,10 @@ actually delivered to this client during the last three minutes. It excludes the
 character's own messages and non-IC/hidden chat, normalizes whitespace, and caps each message at
 300 characters. This is the only dialogue memory supplied by the bridge; there is no global chat
 feed or direct model-to-model channel.
+
+`speech` reports `lastSpokeSecondsAgo` and `lastChannel` for the controlled character's own most
+recent pilot transmission. This small self-memory lets a policy sustain natural chatter without
+speaking on every decision. It resets when the controlled character changes or detaches.
 
 Each observation also includes live booleans for movement, interaction, pickup, drop, hand swap,
 deterministic goals, observation, joining, and speech. The model validator rejects an action when

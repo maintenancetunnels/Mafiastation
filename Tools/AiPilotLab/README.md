@@ -91,6 +91,14 @@ enter another member's `recentSpeech`, allowing ordinary player-to-player conver
 privileged bot backchannel. Job assignment is verified before a model is started and fails closed
 if the server assigned anything else.
 
+Model `say` actions choose either `channel: local` or `channel: radio`. Radio uses the ordinary `;`
+common channel, so crew will answer received radio traffic and use comms for station-wide job
+coordination when their normal equipment permits it.
+
+The crew policy is intentionally conversational: agents greet, acknowledge calls, ask brief job
+questions, and announce relevant work or hazards. A small self-speech timer encourages a useful
+check-in after roughly 30-45 quiet seconds while explicitly discouraging consecutive or canned spam.
+
 The current action vocabulary supports movement/path goals, pickup/drop/hand swap, ordinary
 interaction, and speech. That is enough for patrols, errands, visible hazard response, basic tool
 use, and coordination; complex machine, inventory, medical, and construction UIs are not yet

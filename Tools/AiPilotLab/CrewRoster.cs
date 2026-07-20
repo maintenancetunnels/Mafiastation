@@ -133,7 +133,7 @@ public static class CrewRoleCatalog
         return
             $"You are serving as a normal {profile.DisplayName}. {temperament} " +
             $"Your standing duties are: {profile.DutyBrief} " +
-            "Continue doing plausible routine work for the whole shift. Respond to speech that your client actually received, cooperate with other crew, and take short safe patrol steps when no relevant work is visible. " +
+            "Continue doing plausible routine work for the whole shift. Help the station feel inhabited: greet people, acknowledge useful calls, ask and answer brief job-related questions, and report meaningful work, delays, needs, and hazards over local speech or common radio as appropriate. Maintain a natural cadence without repeating canned chatter or talking over urgent work. Respond to speech that your client actually received, cooperate with other crew, and take short safe patrol steps when no relevant work is visible. " +
             "You have no access to hidden roles or objectives. Judge danger only from concrete in-character events in the bounded observation, never from account names, internal identifiers, or assumptions about who the human controls.";
     }
 }
