@@ -120,6 +120,28 @@ public sealed class BasementSystem : EntitySystem
         var up = Spawn(StairwellUpProto, upCoords);
         _link.TryLink(down, up);
 
+        // Populate the sublevel: solitary confinement lives down here now, contraband
+        // makes it worth robbing, and something stands very still in the dark.
+        SpawnAtRandomTile(basementUid, basementComp, tiles, "SpawnPointPrisonerSolitary");
+
+        for (var i = 0; i < 3; i++)
+        {
+            SpawnAtRandomTile(basementUid, basementComp, tiles, "PrisonContrabandSpawner");
+        }
+
+        if (_cfg.GetCVar(CCVars.BasementStatue))
+            SpawnAtRandomTile(basementUid, basementComp, tiles, "MobStatueStalker");
+
         Log.Info($"Basement loaded ({path}), joined to station {ToPrettyString(stationUid)}, stairwell linked at {downCoords} <-> {upCoords}.");
+    }
+
+    private void SpawnAtRandomTile(EntityUid gridUid, MapGridComponent grid, List<Robust.Shared.Map.TileRef> tiles, string prototype)
+    {
+        if (tiles.Count == 0)
+            return;
+
+        var tile = _random.Pick(tiles);
+        var coords = _map.GridTileToLocal(gridUid, grid, tile.GridIndices);
+        Spawn(prototype, coords);
     }
 }
