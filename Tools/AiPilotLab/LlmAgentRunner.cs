@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 
 namespace Mafiastation.AiPilotLab;
 
@@ -21,6 +22,10 @@ public sealed record LlmAgentSummary(
 
 public sealed class LlmAgentRunner
 {
+    private static readonly TimeSpan AuthorizationReadyTimeout = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan AuthorizationPollInterval = TimeSpan.FromMilliseconds(250);
+    private const string AuthorizationPendingReason = "Authorization has not been checked.";
+
     private readonly IPilotTransport _transport;
     private readonly IPilotPolicy _policy;
 
@@ -54,12 +59,24 @@ public sealed class LlmAgentRunner
         PilotResponse observation;
         try
         {
-            observation = (await SendAsync(bot, PilotRequest.Create("observe"), recorder, deadline.Token)).Response;
+            var initial = await SendAsync(
+                bot,
+                PilotRequest.Create("observe"),
+                recorder,
+                deadline.Token);
+            if (!initial.Response.Ok)
+                throw new InvalidDataException(initial.Response.Error ?? "Initial pilot observation failed.");
+            observation = await EnsureAuthorizedAsync(bot, initial.Response, recorder, deadline.Token);
         }
         catch (Exception exception) when (exception is IOException or InvalidDataException or TimeoutException)
         {
             stopwatch.Stop();
-            return new LlmAgentSummary(bot, 0, 0, 1, $"initial observation failed: {exception.Message}", stopwatch.Elapsed.TotalMilliseconds, false, 0, 0);
+            return new LlmAgentSummary(bot, 0, 0, 1, $"initialization failed: {exception.Message}", stopwatch.Elapsed.TotalMilliseconds, false, 0, 0);
+        }
+        catch (OperationCanceledException) when (deadline.IsCancellationRequested)
+        {
+            stopwatch.Stop();
+            return new LlmAgentSummary(bot, 0, 0, 1, "initialization failed: agent deadline elapsed before authorization was ready.", stopwatch.Elapsed.TotalMilliseconds, false, 0, 0);
         }
 
         while (!deadline.IsCancellationRequested)
@@ -202,6 +219,79 @@ public sealed class LlmAgentRunner
         if (recorder != null)
             await recorder.RecordResponseAsync(bot, exchange.Response, stopwatch.Elapsed.TotalMilliseconds, CancellationToken.None);
         return exchange;
+    }
+
+    private async Task<PilotResponse> EnsureAuthorizedAsync(
+        string bot,
+        PilotResponse observation,
+        PilotRecorder? recorder,
+        CancellationToken cancellationToken)
+    {
+        if (ReadAuthorizationState(observation) is not false)
+            return observation;
+
+        var stopwatch = Stopwatch.StartNew();
+        while (stopwatch.Elapsed < AuthorizationReadyTimeout)
+        {
+            var status = await SendAsync(
+                bot,
+                PilotRequest.Create("status"),
+                recorder,
+                cancellationToken);
+            if (!status.Response.Ok)
+                throw new InvalidDataException(status.Response.Error ?? "Pilot authorization status failed.");
+
+            if (ReadAuthorizationState(status.Response) == true)
+            {
+                var refreshed = await SendAsync(
+                    bot,
+                    PilotRequest.Create("observe"),
+                    recorder,
+                    cancellationToken);
+                if (!refreshed.Response.Ok)
+                    throw new InvalidDataException(refreshed.Response.Error ?? "Authorized pilot observation failed.");
+                if (ReadAuthorizationState(refreshed.Response) is not false)
+                    return refreshed.Response;
+            }
+            else if (ReadAuthorizationReason(status.Response) is { Length: > 0 } reason &&
+                     !string.Equals(reason, AuthorizationPendingReason, StringComparison.Ordinal))
+            {
+                throw new InvalidDataException($"Pilot authorization denied: {reason}");
+            }
+
+            await Task.Delay(AuthorizationPollInterval, cancellationToken);
+        }
+
+        throw new TimeoutException(
+            $"Pilot authorization was not confirmed within {AuthorizationReadyTimeout.TotalSeconds:0} seconds.");
+    }
+
+    private static bool? ReadAuthorizationState(PilotResponse response)
+    {
+        if (response.Data.ValueKind != JsonValueKind.Object ||
+            !response.Data.TryGetProperty("authorized", out var authorized))
+        {
+            return null;
+        }
+
+        return authorized.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => null,
+        };
+    }
+
+    private static string? ReadAuthorizationReason(PilotResponse response)
+    {
+        if (response.Data.ValueKind != JsonValueKind.Object ||
+            !response.Data.TryGetProperty("authorizationReason", out var reason) ||
+            reason.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        return reason.GetString()?.Trim();
     }
 
     private static bool IsActiveGoal(string? state)

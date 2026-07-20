@@ -133,6 +133,11 @@ stalls, or is cancelled. Output is revalidated against both an action allowlist 
 capacity snapshot, and target IDs must appear in the latest bounded observation. Add
 `--allow-speech` only when both client and server speech gates are enabled.
 
+Before its first model call, the runner also preflights bridge authorization. A transient
+"not checked" state is polled briefly and followed by a fresh observation; a disabled gate,
+non-loopback connection, or non-allowlisted account fails with the server reason without spending
+model compute.
+
 OpenAI-compatible requests use standard JSON-object response mode by default. If a model still
 wraps or misnames an otherwise recoverable action, the policy safely extracts the first balanced
 JSON object and makes at most one repair request before the ordinary consecutive-error limit
@@ -140,6 +145,11 @@ applies. Set `--model-repair-attempts 0` to disable repair or
 `--disable-json-object-mode` only for an older compatible endpoint that rejects
 `response_format`. `--startup-timeout-seconds` accepts 1-600 seconds; raise it when several
 headless clients share a busy development machine.
+
+Repeated local logins can leave Robust collision suffixes on reused account names. For generated
+`--count` launches, `--username-start-index 5` starts the whole identity set at `Pilot5`
+(`pilot5`, `mafiastation-pilot-5`, and so on). Those exact account names must already be present in
+the server pilot allowlist; this option does not broaden authorization.
 
 ## Record and replay
 

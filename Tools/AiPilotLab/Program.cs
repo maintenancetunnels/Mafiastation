@@ -70,6 +70,7 @@ internal static class Program
                      [--count N] [--scenario PATH | --goal TEXT | --crew ROSTER]
                      [agent model options] [--startup-timeout-seconds N]
                      [--pipe-prefix NAME] [--username-prefix NAME]
+                     [--username-start-index N]
               moderation --action list|show|label|summary|export --incidents PATH [options]
 
             Model API keys are read only from an environment variable (MAFIA_LLM_KEY by default).
@@ -207,6 +208,13 @@ internal static class Program
 
         var pipePrefix = arguments.Get("pipe-prefix") ?? "mafiastation-pilot";
         var usernamePrefix = arguments.Get("username-prefix") ?? "Pilot";
+        var usernameStartIndex = arguments.GetInt("username-start-index", 1, 1, 10_000);
+        if (arguments.Has("username-start-index") && (crew != null || scenario != null))
+        {
+            throw new ArgumentException(
+                "--username-start-index applies only to generated --count launches; crew and scenario files own their usernames.");
+        }
+
         var specs = crew != null
             ? crew.Agents.Select(agent =>
                 new ClientLaunchSpec(agent.Name, agent.Pipe, agent.Username)).ToArray()
@@ -216,7 +224,7 @@ internal static class Program
                         bot.Name,
                         bot.Pipe,
                         bot.Username ?? $"{usernamePrefix}{index + 1}")).ToArray()
-                : Enumerable.Range(1, arguments.GetInt("count", 1, 1, 32))
+                : Enumerable.Range(usernameStartIndex, arguments.GetInt("count", 1, 1, 32))
                     .Select(index =>
                         new ClientLaunchSpec(
                             $"pilot{index}",
