@@ -15,14 +15,16 @@ public sealed record LlmAgentSummary(
     int Errors,
     string CompletionReason,
     double DurationMilliseconds,
-    bool Success);
+    bool Success,
+    int RoutinePolls = 0,
+    int Escalations = 0);
 
 public sealed class LlmAgentRunner
 {
     private readonly IPilotTransport _transport;
-    private readonly LlmPilotPolicy _policy;
+    private readonly IPilotPolicy _policy;
 
-    public LlmAgentRunner(IPilotTransport transport, LlmPilotPolicy policy)
+    public LlmAgentRunner(IPilotTransport transport, IPilotPolicy policy)
     {
         _transport = transport;
         _policy = policy;
@@ -45,6 +47,8 @@ public sealed class LlmAgentRunner
         var decisions = 0;
         var actions = 0;
         var errors = 0;
+        var routinePolls = 0;
+        var escalations = 0;
         var consecutiveErrors = 0;
         var completionReason = "duration";
         PilotResponse observation;
@@ -55,7 +59,7 @@ public sealed class LlmAgentRunner
         catch (Exception exception) when (exception is IOException or InvalidDataException or TimeoutException)
         {
             stopwatch.Stop();
-            return new LlmAgentSummary(bot, 0, 0, 1, $"initial observation failed: {exception.Message}", stopwatch.Elapsed.TotalMilliseconds, false);
+            return new LlmAgentSummary(bot, 0, 0, 1, $"initial observation failed: {exception.Message}", stopwatch.Elapsed.TotalMilliseconds, false, 0, 0);
         }
 
         while (!deadline.IsCancellationRequested)
@@ -63,36 +67,63 @@ public sealed class LlmAgentRunner
             var iteration = Stopwatch.StartNew();
             try
             {
-                var decision = await _policy.DecideAsync(options.Goal, observation, deadline.Token);
-                decisions++;
-                if (recorder != null)
-                    await recorder.RecordModelAsync(bot, decision, CancellationToken.None);
-                var exchange = await SendAsync(bot, decision.Request, recorder, deadline.Token);
-                actions++;
-                if (!exchange.Response.Ok)
-                    throw new InvalidDataException(exchange.Response.Error ?? "Pilot action failed.");
-                consecutiveErrors = 0;
+                if (IsActiveGoal(PilotJson.GoalState(observation)))
+                {
+                    var status = await SendAsync(
+                        bot,
+                        PilotRequest.Create("goal_status"),
+                        recorder,
+                        deadline.Token);
+                    actions++;
+                    routinePolls++;
+                    if (!status.Response.Ok)
+                        throw new InvalidDataException(status.Response.Error ?? "Pilot goal status failed.");
 
-                if (decision.Request.Action == "stop")
-                {
-                    completionReason = "model requested stop";
-                    break;
-                }
-                if (IsGoalComplete(exchange.Response))
-                {
-                    completionReason = "pilot goal completed";
-                    break;
-                }
-
-                if (decision.Request.Action == "observe")
-                {
-                    observation = exchange.Response;
+                    if (IsActiveGoal(PilotJson.GoalState(status.Response)))
+                    {
+                        observation = status.Response;
+                    }
+                    else
+                    {
+                        var observed = await SendAsync(
+                            bot,
+                            PilotRequest.Create("observe"),
+                            recorder,
+                            deadline.Token);
+                        actions++;
+                        observation = observed.Response;
+                    }
+                    consecutiveErrors = 0;
                 }
                 else
                 {
-                    var observed = await SendAsync(bot, PilotRequest.Create("observe"), recorder, deadline.Token);
+                    escalations++;
+                    var decision = await _policy.DecideAsync(options.Goal, observation, deadline.Token);
+                    decisions++;
+                    if (recorder != null)
+                        await recorder.RecordModelAsync(bot, decision, CancellationToken.None);
+                    var exchange = await SendAsync(bot, decision.Request, recorder, deadline.Token);
                     actions++;
-                    observation = observed.Response;
+                    if (!exchange.Response.Ok)
+                        throw new InvalidDataException(exchange.Response.Error ?? "Pilot action failed.");
+                    consecutiveErrors = 0;
+
+                    if (decision.Request.Action == "stop")
+                    {
+                        completionReason = "model requested stop";
+                        break;
+                    }
+
+                    if (decision.Request.Action == "observe")
+                    {
+                        observation = exchange.Response;
+                    }
+                    else
+                    {
+                        var observed = await SendAsync(bot, PilotRequest.Create("observe"), recorder, deadline.Token);
+                        actions++;
+                        observation = observed.Response;
+                    }
                 }
             }
             catch (OperationCanceledException) when (deadline.IsCancellationRequested)
@@ -145,7 +176,16 @@ public sealed class LlmAgentRunner
         }
         stopwatch.Stop();
         var success = errors == 0;
-        return new LlmAgentSummary(bot, decisions, actions, errors, completionReason, stopwatch.Elapsed.TotalMilliseconds, success);
+        return new LlmAgentSummary(
+            bot,
+            decisions,
+            actions,
+            errors,
+            completionReason,
+            stopwatch.Elapsed.TotalMilliseconds,
+            success,
+            routinePolls,
+            escalations);
     }
 
     private async Task<PilotExchange> SendAsync(
@@ -164,14 +204,8 @@ public sealed class LlmAgentRunner
         return exchange;
     }
 
-    private static bool IsGoalComplete(PilotResponse response)
+    private static bool IsActiveGoal(string? state)
     {
-        if (response.Data.ValueKind != System.Text.Json.JsonValueKind.Object)
-            return false;
-        if (response.Data.TryGetProperty("goalComplete", out var complete) && complete.ValueKind == System.Text.Json.JsonValueKind.True)
-            return true;
-        return response.Data.TryGetProperty("state", out var state) &&
-               state.ValueKind == System.Text.Json.JsonValueKind.String &&
-               state.GetString() == "completed";
+        return state is "planning" or "moving";
     }
 }

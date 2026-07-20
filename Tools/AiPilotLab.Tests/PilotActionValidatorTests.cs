@@ -124,4 +124,60 @@ public sealed class PilotActionValidatorTests
         Assert.That(_validator.Validate(near, null, false, 10).IsValid, Is.True);
         Assert.That(_validator.Validate(far, null, false, 10).IsValid, Is.False);
     }
+
+    [Test]
+    public void RejectsActionWhenCurrentCapacityIsFalse()
+    {
+        var observation = PilotJsonTests.Response(new
+        {
+            self = new { position = new { x = 0, y = 0 } },
+            capabilities = new
+            {
+                canMove = false,
+                canUseGoals = false,
+                canInteract = true,
+            },
+        });
+        var movement = JsonSerializer.SerializeToElement(new
+        {
+            action = "move",
+            arguments = new { direction = "north" },
+        });
+        var goal = JsonSerializer.SerializeToElement(new
+        {
+            action = "goal",
+            arguments = new { kind = "move_relative", x = 1, y = 0 },
+        });
+
+        Assert.That(_validator.Validate(movement, observation, false).IsValid, Is.False);
+        Assert.That(_validator.Validate(goal, observation, false).IsValid, Is.False);
+    }
+
+    [Test]
+    public void RejectsPickupGoalWhenFinalActionCapacityIsFalse()
+    {
+        var observation = PilotJsonTests.Response(new
+        {
+            self = new { position = new { x = 0, y = 0 } },
+            capabilities = new
+            {
+                canUseGoals = true,
+                canPickup = false,
+            },
+            entities = new[]
+            {
+                new { id = 7 },
+            },
+        });
+        var goal = JsonSerializer.SerializeToElement(new
+        {
+            action = "goal",
+            arguments = new { kind = "pickup", targetId = 7 },
+        });
+
+        var validation = _validator.Validate(goal, observation, false);
+
+        Assert.That(validation.IsValid, Is.False);
+        Assert.That(validation.Error, Does.Contain("pickup goals"));
+    }
 }

@@ -12,6 +12,7 @@
 
   <ItemGroup>
       <ProjectReference Include="..\Content.Client\Content.Client.csproj" />
+      <ProjectReference Include="..\Content.Client\_ForkStation\AiPilot\TrustedBridge\Robust.Client.Mafiastation.AiPilot.csproj" />
       <ProjectReference Include="..\Content.Server\Content.Server.csproj" />
       <ProjectReference Include="..\Content.Shared\Content.Shared.csproj" />
       <ProjectReference Include="..\Content.IntegrationTests\Content.IntegrationTests.csproj" />

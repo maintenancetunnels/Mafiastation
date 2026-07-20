@@ -66,6 +66,11 @@ public sealed class LlmNpcAutonomySystem : EntitySystem
         var query = EntityQueryEnumerator<LlmNpcAutonomyComponent, HTNComponent>();
         while (query.MoveNext(out var uid, out var autonomy, out var htn))
         {
+            // Hybrid goal/capacity supervision owns escalation for this NPC. Never run both
+            // executive loops against the same HTN root.
+            if (HasComp<LlmNpcHybridComponent>(uid))
+                continue;
+
             if (autonomy.NextDecision == TimeSpan.Zero)
                 autonomy.NextDecision = now + TimeSpan.FromSeconds(1);
 
@@ -124,6 +129,12 @@ public sealed class LlmNpcAutonomySystem : EntitySystem
         if (!TryComp<HTNComponent>(target, out var htn))
         {
             error = "Target entity does not have an HTN NPC component.";
+            return false;
+        }
+
+        if (HasComp<LlmNpcHybridComponent>(target))
+        {
+            error = "Disable hybrid goal/capacity control before enabling periodic LLM autonomy.";
             return false;
         }
 

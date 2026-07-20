@@ -83,6 +83,7 @@ public sealed class ClientLauncher
         if (isDll)
             startInfo.ArgumentList.Add(clientPath);
         startInfo.ArgumentList.Add("--headless");
+        startInfo.ArgumentList.Add("--ai-pilot-local-trusted-bridge");
         startInfo.ArgumentList.Add("--connect");
         startInfo.ArgumentList.Add("--connect-address");
         startInfo.ArgumentList.Add(options.ServerAddress);
@@ -95,6 +96,8 @@ public sealed class ClientLauncher
             AddCvar(startInfo, cvar);
         }
         // Required bridge settings are last so an accidental duplicate --client-cvar cannot override them.
+        // Robust's standalone headless path otherwise reaches an OpenGL-only RSI atlas preload.
+        AddCvar(startInfo, "res.texturepreloadingenabled=false");
         AddCvar(startInfo, "mafia.ai_pilot.client_enabled=true");
         AddCvar(startInfo, $"mafia.ai_pilot.pipe_name={spec.Pipe}");
 

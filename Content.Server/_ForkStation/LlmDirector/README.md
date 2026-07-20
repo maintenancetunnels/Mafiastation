@@ -25,6 +25,7 @@ max_pending_requests = 4
 npc_autonomy_enabled = false
 npc_minimum_decision_seconds = 60
 npc_maximum_speech_memories = 12
+npc_hybrid_enabled = false
 npc_dialogue_enabled = false
 npc_dialogue_allow_speech = false
 npc_dialogue_minimum_seconds = 120
@@ -51,6 +52,9 @@ Examples:
 llmnpcgoal <netEntityId> SimpleHostileCompound,SimpleHumanoidHostileCompound "The target is hunting through maintenance."
 llmnpcautonomy <netEntityId> 90 SimpleHostileCompound,SimpleHumanoidHostileCompound "A suspicious station custodian who reacts to nearby conversation."
 llmnpcautonomyoff <netEntityId>
+llmnpchybridstatus <netEntityId>
+llmnpchybridescalate <netEntityId> "The routine plan is blocked."
+llmnpchybridoff <netEntityId>
 llmnpcdialogue <netEntityId> 120 "A terse maintenance custodian; observant, suspicious, and never verbose."
 llmnpcdialoguestatus <netEntityId>
 llmnpcdialoguenow <netEntityId>
@@ -71,6 +75,24 @@ locomotion, targeting, combat, and every concrete action continue to run through
 server-owned HTN operators. Autonomous
 requests require both `enabled` and `npc_autonomy_enabled`, and share the global request/token
 budgets.
+
+## Goal/capacity hybrid NPCs
+
+`LlmNpcHybridComponent` keeps one ordinary HTN root active for cheap routine behavior. It asks the
+director for a bounded choice only after an authored escalation: sustained no-plan state, nearby
+IC speech, or an explicit admin request. Each choice ID maps to a server-authored HTN compound
+root with required capacities. The model cannot provide a root name, coordinate, entity ID,
+operator, or command.
+
+Current movement, interaction, hand, speech, and door capacities are revalidated before queuing
+and again when the result completes. An accepted complex root receives a finite lease and then
+automatically returns to the routine root; losing capacity ends the lease early. Player-controlled
+entities are refused, and this component is mutually exclusive with periodic
+`LlmNpcAutonomyComponent`.
+
+The lab prototype `MobMafiaHybridPrisoner` uses normal food/idling HTN for its routine. See
+[`docs/ai-pilot/hybrid-control.md`](../../../docs/ai-pilot/hybrid-control.md) for configuration,
+the connected-player pilot path, and persistent-prisoner boundaries.
 
 ## Contextual NPC dialogue
 

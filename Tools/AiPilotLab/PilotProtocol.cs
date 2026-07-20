@@ -186,4 +186,44 @@ public static class PilotJson
         }
         return ids;
     }
+
+    /// <summary>
+    /// Enforces a bridge-reported dynamic capacity when present. Older recordings and isolated
+    /// validator tests may not contain a capacity snapshot, so absence remains "unknown"; a
+    /// present false value always fails closed.
+    /// </summary>
+    public static bool CapabilityAllows(PilotResponse? response, string capability)
+    {
+        if (response?.Data.ValueKind != JsonValueKind.Object ||
+            !response.Data.TryGetProperty("capabilities", out var capabilities) ||
+            capabilities.ValueKind != JsonValueKind.Object ||
+            !capabilities.TryGetProperty(capability, out var value))
+        {
+            return true;
+        }
+
+        return value.ValueKind == JsonValueKind.True;
+    }
+
+    public static string? GoalState(PilotResponse? response)
+    {
+        if (response?.Data.ValueKind != JsonValueKind.Object)
+            return null;
+
+        if (response.Data.TryGetProperty("state", out var direct) &&
+            direct.ValueKind == JsonValueKind.String)
+        {
+            return direct.GetString();
+        }
+
+        if (response.Data.TryGetProperty("goal", out var goal) &&
+            goal.ValueKind == JsonValueKind.Object &&
+            goal.TryGetProperty("state", out var nested) &&
+            nested.ValueKind == JsonValueKind.String)
+        {
+            return nested.GetString();
+        }
+
+        return null;
+    }
 }

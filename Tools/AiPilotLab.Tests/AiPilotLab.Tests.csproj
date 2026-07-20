@@ -14,5 +14,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\AiPilotLab\AiPilotLab.csproj" />
+    <ProjectReference Include="..\..\Content.Client\_ForkStation\AiPilot\TrustedBridge\Robust.Client.Mafiastation.AiPilot.csproj" />
   </ItemGroup>
 </Project>

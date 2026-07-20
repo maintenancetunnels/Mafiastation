@@ -163,6 +163,13 @@ public sealed partial class CCVars
     public static readonly CVarDef<int> MafiaDirectorNpcMaximumSpeechMemories =
         CVarDef.Create("mafia.director.npc_maximum_speech_memories", 12, CVar.SERVERONLY);
 
+    /// <summary>
+    /// Independent default-off gate for goal/capacity NPCs. Routine HTN continues to run when
+    /// this is false; only escalation to the bounded LLM director is disabled.
+    /// </summary>
+    public static readonly CVarDef<bool> MafiaDirectorNpcHybridEnabled =
+        CVarDef.Create("mafia.director.npc_hybrid_enabled", false, CVar.SERVERONLY);
+
     /// <summary>Independent default-off gate for contextual NPC dialogue proposals.</summary>
     public static readonly CVarDef<bool> MafiaDirectorNpcDialogueEnabled =
         CVarDef.Create("mafia.director.npc_dialogue_enabled", false, CVar.SERVERONLY);

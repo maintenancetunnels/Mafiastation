@@ -1,0 +1,50 @@
+# Cheap routine layer: nutrition and idling are ordinary HTN branches. The LLM is not involved in
+# routine selection; only authored no-plan, nearby-speech, or admin escalation invokes it.
+- type: htnCompound
+  id: MafiaHybridPrisonerRoutine
+  branches:
+    - tasks:
+        - !type:HTNCompoundTask
+          task: FoodCompound
+    - tasks:
+        - !type:HTNCompoundTask
+          task: IdleCompound
+
+# Admin-spawnable local laboratory actor. This is deliberately not wired into the persistent
+# prisoner job: player prisoners continue to be players, while this prototype validates the
+# server-owned NPC half of the hybrid architecture.
+- type: entity
+  id: MobMafiaHybridPrisoner
+  parent: MobCivilian
+  name: experimental prisoner
+  description: A local-test humanoid whose routine behavior is ordinary HTN.
+  suffix: AI PILOT LAB, NPC
+  components:
+    - type: HTN
+      rootTask:
+        task: MafiaHybridPrisonerRoutine
+    - type: LlmNpcHybrid
+      routineTask: MafiaHybridPrisonerRoutine
+      capabilities:
+        - Move
+        - Interact
+        - Hands
+        - Speak
+        - OpenDoors
+      complexGoals:
+        - id: relocate
+          task: MoveToPathfindPointCompound
+          description: Relocate to another nearby accessible area when the present situation is blocked or unsafe.
+          requiredCapabilities:
+            - Move
+        - id: remain_observant
+          task: IdleSpinCompound
+          description: Stay put, remain observant, and avoid making the situation more chaotic.
+      persona: A cautious station prisoner. Prefer compliance and self-preservation over confrontation.
+      evaluationIntervalSeconds: 1
+      noPlanEscalationSeconds: 8
+      decisionCooldownSeconds: 60
+      complexGoalLeaseSeconds: 25
+      observationRadius: 12
+      memorySeconds: 180
+      escalateOnSpeech: true

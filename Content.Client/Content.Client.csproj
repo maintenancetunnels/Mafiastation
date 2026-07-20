@@ -7,6 +7,10 @@
   </PropertyGroup>
   <Import Project="../MSBuild/Content.props" />
   <ItemGroup>
+    <Compile Remove="_ForkStation\AiPilot\TrustedBridge\**\*.cs" />
+    <ProjectReference Include="_ForkStation\AiPilot\TrustedBridge\Robust.Client.Mafiastation.AiPilot.csproj" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="Nett" />
     <PackageReference Include="JetBrains.Annotations" PrivateAssets="All" />
     <PackageReference Include="SixLabors.ImageSharp" />

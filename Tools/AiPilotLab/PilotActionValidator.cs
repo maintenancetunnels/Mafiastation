@@ -60,15 +60,55 @@ public sealed class PilotActionValidator
             return PilotActionValidation.Invalid("Action arguments must be a JSON object.");
 
         if (ArgumentlessActions.Contains(action))
+        {
+            if (action == "drop" && !PilotJson.CapabilityAllows(latestObservation, "canDrop"))
+                return PilotActionValidation.Invalid("Latest pilot capacity snapshot does not allow dropping.");
+            if (action == "swap_hands" && !PilotJson.CapabilityAllows(latestObservation, "canSwapHands"))
+                return PilotActionValidation.Invalid("Latest pilot capacity snapshot does not allow swapping hands.");
             return PilotActionValidation.Valid(PilotRequest.Create(action));
+        }
         if (action == "move")
+        {
+            if (!PilotJson.CapabilityAllows(latestObservation, "canMove"))
+                return PilotActionValidation.Invalid("Latest pilot capacity snapshot does not allow movement.");
             return ValidateMove(arguments);
+        }
         if (TargetActions.Contains(action))
+        {
+            var capability = action == "pickup" ? "canPickup" : "canInteract";
+            if (!PilotJson.CapabilityAllows(latestObservation, capability))
+                return PilotActionValidation.Invalid($"Latest pilot capacity snapshot does not allow {action}.");
             return ValidateTargetAction(action == "use" ? "interact" : action, arguments, latestObservation);
+        }
         if (action == "goal")
+        {
+            if (!PilotJson.CapabilityAllows(latestObservation, "canUseGoals"))
+                return PilotActionValidation.Invalid("Latest pilot capacity snapshot does not allow deterministic goals.");
+            if (arguments.TryGetProperty("kind", out var goalKind) &&
+                goalKind.ValueKind == JsonValueKind.String)
+            {
+                var kind = goalKind.GetString()?.Trim().ToLowerInvariant();
+                if (kind == "interact" &&
+                    !PilotJson.CapabilityAllows(latestObservation, "canInteract"))
+                {
+                    return PilotActionValidation.Invalid(
+                        "Latest pilot capacity snapshot does not allow interaction goals.");
+                }
+                if (kind == "pickup" &&
+                    !PilotJson.CapabilityAllows(latestObservation, "canPickup"))
+                {
+                    return PilotActionValidation.Invalid(
+                        "Latest pilot capacity snapshot does not allow pickup goals.");
+                }
+            }
             return ValidateGoal(arguments, latestObservation, maximumGoalDistance);
+        }
         if (action == "say")
+        {
+            if (!PilotJson.CapabilityAllows(latestObservation, "canSpeak"))
+                return PilotActionValidation.Invalid("Latest pilot capacity snapshot does not allow speech.");
             return ValidateSpeech(arguments, allowSpeech);
+        }
         return PilotActionValidation.Invalid($"Action '{action}' is not in the pilot allowlist.");
     }
 

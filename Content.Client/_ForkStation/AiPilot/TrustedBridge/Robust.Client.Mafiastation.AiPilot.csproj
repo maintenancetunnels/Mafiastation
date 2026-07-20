@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Robust.Client.Mafiastation.AiPilot</AssemblyName>
+    <RootNamespace>Robust.Client.Mafiastation.AiPilot</RootNamespace>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(FullRelease)' == 'True'">
+    <DefineConstants>$(DefineConstants);FULL_RELEASE</DefineConstants>
+  </PropertyGroup>
+</Project>

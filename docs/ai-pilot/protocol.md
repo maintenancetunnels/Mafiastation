@@ -4,6 +4,11 @@ The bridge uses one UTF-8 JSON request and one JSON response per Windows named-p
 The client creates the pipe with current-user-only access. Each caller-chosen request ID is echoed
 verbatim so concurrent orchestration can reject mismatched responses.
 
+Normal sandboxed content sees only primitive request/response objects. A narrowly gated trusted
+helper performs the operating-system pipe and JSON operations; it authorizes only an explicit
+development headless launch whose effective final server address parses as UDP loopback and whose
+effective final bridge CVars name the same validated pipe. Full-release builds cannot authorize it.
+
 ```json
 {"version":1,"id":"opaque-id","action":"move","arguments":{"direction":"east","durationMs":250}}
 ```
@@ -36,12 +41,22 @@ connection.
 
 Goal kinds are `move_relative`, `move_to`, `move_to_entity`, `interact`, and `pickup`. The server
 path planner returns coordinates, but the connected client traverses them by producing ordinary
-movement inputs. Door interaction still goes through normal interaction handling.
+movement inputs. Door interaction still goes through normal interaction handling. While a goal is
+`planning` or `moving`, the model runner sends only `goal_status`; terminal state causes a fresh
+observation and returns control to the model. Goal status also reports the current position,
+active waypoint position, and remaining waypoint distance when available, so stalls can be
+diagnosed without exposing another control surface.
 
 ## Observation shape
 
 An observation contains attachment state, current map position, active hand, goal status, and a
 bounded nearest-first entity array. Entity entries contain only information already replicated to
 that client: opaque local ID, display name, prototype ID when available, relative position,
-distance, and interaction hints. IDs expire from the target allowlist after a short observation
-window.
+distance, and interaction hints. Only top-level entities on the controlled character's current
+grid are included, excluding its inventory/body/action descendants. IDs expire from the target
+allowlist after a short observation window.
+
+Each observation also includes live booleans for movement, interaction, pickup, drop, hand swap,
+deterministic goals, observation, joining, and speech. The model validator rejects an action when
+its reported capacity is false. The bridge checks the same action blocker/hand state immediately
+before emitting input, and server-assisted goals are validated again by the server.

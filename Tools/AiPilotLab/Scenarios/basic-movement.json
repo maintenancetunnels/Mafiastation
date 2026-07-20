@@ -52,11 +52,11 @@
       "delayAfterMs": 250
     },
     {
-      "name": "deterministic-relative-goal",
+      "name": "deterministic-return-goal",
       "action": "goal",
       "arguments": {
         "kind": "move_relative",
-        "x": 2,
+        "x": -1,
         "y": 0,
         "range": 0.6
       },

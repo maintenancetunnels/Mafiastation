@@ -7,6 +7,12 @@ the same input commands and interaction systems used by a normal player.
 This is a local testing tool, not a server bot API. Both the client and server gates default to
 off. The server additionally requires a loopback connection and an account allowlist.
 
+The normal Robust content sandbox remains enabled. Operating-system pipe and JSON work lives in a
+small preloaded helper that is unavailable in full-release builds and remains inert unless the
+immutable process arguments specify headless mode, a strict loopback game address, the trusted
+bridge flag, and the exact enabled pipe CVars. The launcher supplies that proof and disables
+texture preloading for the supported headless path.
+
 ## Build and verify
 
 ```powershell
@@ -40,6 +46,11 @@ The launcher enables each client bridge, assigns a unique pipe and username, wai
 bridge, runs bot steps concurrently, saves JSONL actions and a metric summary, and terminates only
 the client processes it started.
 
+Robust optional authentication exposes local usernames as `localhost@Pilot1`; the server accepts
+that documented loopback alias for an allowlist entry of `Pilot1`. Give simultaneous pilots unique
+allowlisted usernames. The explicit `join` operation is idempotent when a lobby-disabled test
+server has already attached the client.
+
 ## Run a cheap model policy
 
 A local OpenAI-compatible endpoint can run without an API key:
@@ -61,9 +72,11 @@ variable with `--api-key-env`). Keys are never accepted on the command line or w
 action log. Anthropic's Messages API is also supported with `--provider anthropic` and its full
 endpoint URL.
 
-The model chooses at most once per second. Its output is revalidated against an action allowlist,
-and target IDs must appear in the latest bounded observation. Add `--allow-speech` only when both
-the client and server speech gates are also enabled.
+The model is invoked at most once per decision interval. After it starts a deterministic goal,
+the runner polls the ordinary executor without model calls until the goal completes, fails,
+stalls, or is cancelled. Output is revalidated against both an action allowlist and the current
+capacity snapshot, and target IDs must appear in the latest bounded observation. Add
+`--allow-speech` only when both client and server speech gates are enabled.
 
 ## Record and replay
 
@@ -81,7 +94,9 @@ Replay skips `say`, `whisper`, `join`, and `ready` by default. Their separate
 `--allow-speech` and `--allow-lifecycle` switches make potentially surprising replays explicit.
 
 See [protocol.md](../../docs/ai-pilot/protocol.md) and
-[safety.md](../../docs/ai-pilot/safety.md) for the bridge contract and threat model.
+[safety.md](../../docs/ai-pilot/safety.md) for the bridge contract and threat model. The full
+player-pilot/server-NPC split is described in
+[hybrid-control.md](../../docs/ai-pilot/hybrid-control.md).
 
 ## Review moderation false positives
 
