@@ -3,18 +3,19 @@
 #   - N LLM-piloted crew members as real connected clients (Codex's AiPilotLab)
 # Then YOU connect as the protagonist (instructions printed at the end).
 #
-# LLM crew needs a model: set $env:MAFIA_LLM_KEY to your Anthropic API key first,
+# LLM crew needs a model (OpenAI is the default brain): set $env:OPENAI_API_KEY first,
 # or pass -NoLlm for deterministic scripted crew (no key needed, less lifelike).
 #
 # Examples:
-#   $env:MAFIA_LLM_KEY = 'sk-ant-...' ; ./run_llm_station.ps1 -Crew 5
+#   $env:OPENAI_API_KEY = 'sk-...' ; ./run_llm_station.ps1 -Crew 5
+#   ./run_llm_station.ps1 -Provider anthropic -Endpoint https://api.anthropic.com/v1/messages -Model claude-haiku-4-5-20251001
 #   ./run_llm_station.ps1 -NoLlm -Crew 2          # keyless smoke crew
 
 param(
     [int]$Crew = 5,
-    [string]$Provider = 'anthropic',
-    [string]$Endpoint = 'https://api.anthropic.com/v1/messages',
-    [string]$Model = 'claude-haiku-4-5-20251001',
+    [string]$Provider = 'openai-compatible',
+    [string]$Endpoint = 'https://api.openai.com/v1/chat/completions',
+    [string]$Model = 'gpt-5-mini',
     [int]$DurationSeconds = 3600,
     [string]$Goal = 'You are a crew member aboard a Nanotrasen space station. Do your job, explore, and talk with your crewmates in character. React honestly to anything strange: flickering lights, whispers, announcements that do not add up, statues you do not remember. Trust is optional.',
     [switch]$NoLlm
@@ -53,23 +54,24 @@ $labArgs = @(
     '--count', $Crew
 )
 
-if ($NoLlm) {
+# Key resolution: MAFIA_LLM_KEY wins; otherwise fall back to OPENAI_API_KEY.
+$keyEnv = if ($env:MAFIA_LLM_KEY) { 'MAFIA_LLM_KEY' } elseif ($env:OPENAI_API_KEY) { 'OPENAI_API_KEY' } else { $null }
+
+if ($NoLlm -or -not $keyEnv) {
+    if (-not $NoLlm) {
+        Write-Warning 'No OPENAI_API_KEY or MAFIA_LLM_KEY set — falling back to scripted smoke crew.'
+    }
     $labArgs += @('--scenario', (Join-Path $root 'Tools\AiPilotLab\Scenarios\multi-bot-smoke.json'))
 }
 else {
-    if ($Provider -eq 'anthropic' -and -not $env:MAFIA_LLM_KEY) {
-        Write-Warning 'MAFIA_LLM_KEY is not set — falling back to -NoLlm scripted crew.'
-        $labArgs += @('--scenario', (Join-Path $root 'Tools\AiPilotLab\Scenarios\multi-bot-smoke.json'))
-    }
-    else {
-        $labArgs += @(
-            '--goal', $Goal,
-            '--provider', $Provider,
-            '--endpoint', $Endpoint,
-            '--model', $Model,
-            '--duration-seconds', $DurationSeconds
-        )
-    }
+    $labArgs += @(
+        '--goal', $Goal,
+        '--provider', $Provider,
+        '--endpoint', $Endpoint,
+        '--model', $Model,
+        '--api-key-env', $keyEnv,
+        '--duration-seconds', $DurationSeconds
+    )
 }
 
 Write-Host ''
