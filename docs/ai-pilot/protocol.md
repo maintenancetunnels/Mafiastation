@@ -70,8 +70,9 @@ character's own messages and non-IC/hidden chat, normalizes whitespace, and caps
 feed or direct model-to-model channel.
 
 `speech` reports `lastSpokeSecondsAgo` and `lastChannel` for the controlled character's own most
-recent pilot transmission. This small self-memory lets a policy sustain natural chatter without
-speaking on every decision. It resets when the controlled character changes or detaches.
+recent pilot transmission. This small self-memory prevents repetition and preserves conversational
+continuity; elapsed silence is not itself a reason to speak. It resets when the controlled
+character changes or detaches.
 
 Each observation also includes live booleans for movement, interaction, pickup, drop, hand swap,
 deterministic goals, observation, joining, and speech. The model validator rejects an action when

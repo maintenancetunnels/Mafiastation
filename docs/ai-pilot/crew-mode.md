@@ -70,12 +70,13 @@ warnings, and replies to radio traffic. Incoming whispers are perceived but are 
 outgoing pilot channel. Radio still requires ordinary equipment and obeys normal delivery, so
 agents do not gain a special coordination channel.
 
-Crew prompts deliberately create some ambient life instead of waiting silently for a perfect task.
-Agents greet nearby crew, acknowledge useful calls, ask and answer short job questions, and report
-meaningful starts, completions, delays, needs, and hazards. Their observation includes the age and
-channel of their own last pilot transmission; after roughly 30-45 quiet seconds they may make a
-brief relevant check-in when no urgent physical action is pending. They are also told not to speak
-on consecutive decisions just to fill silence or repeat canned status lines.
+Crew speech is event- and task-driven. An agent may coordinate a concrete task start or handoff,
+request specific information, help, or supplies, report an observed completion, delay, need, or
+hazard, or answer relevant speech its own client received. Goal completion/failure and received
+speech are explicit communication triggers. Elapsed silence, first spawn, or merely seeing another
+character are not triggers: silence is valid, and generic greetings, check-ins, "all clear" calls,
+and patrol narration are treated as filler. The age and channel of the agent's last transmission
+exist only to prevent immediate repetition.
 
 ## Supplied roster
 

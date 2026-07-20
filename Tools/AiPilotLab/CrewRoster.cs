@@ -99,7 +99,7 @@ public static class CrewRoleCatalog
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["steady"] = "Be calm, practical, and moderately sociable.",
-            ["sociable"] = "Be friendly and conversational, but do not chatter when work is urgent.",
+            ["sociable"] = "Be friendly and conversational when a concrete task, need, or received remark gives you something relevant to say; otherwise work quietly.",
             ["cautious"] = "Be careful, seek confirmation, and favor retreat or assistance when danger is unclear.",
             ["blunt"] = "Be concise and direct without becoming needlessly hostile.",
             ["curious"] = "Ask sensible in-character questions and investigate benign anomalies without taking reckless risks.",
@@ -133,7 +133,7 @@ public static class CrewRoleCatalog
         return
             $"You are serving as a normal {profile.DisplayName}. {temperament} " +
             $"Your standing duties are: {profile.DutyBrief} " +
-            "Continue doing plausible routine work for the whole shift. Help the station feel inhabited: greet people, acknowledge useful calls, ask and answer brief job-related questions, and report meaningful work, delays, needs, and hazards over local speech or common radio as appropriate. Maintain a natural cadence without repeating canned chatter or talking over urgent work. Respond to speech that your client actually received, cooperate with other crew, and take short safe patrol steps when no relevant work is visible. " +
+            "Continue doing plausible routine work for the whole shift. Communicate only when the current duty, bounded observation, a meaningful goal transition, a concrete need, or speech this client actually received gives the message a purpose. Use local speech or common radio as appropriate to coordinate work, request specific help or supplies, report a real completion, delay, or hazard, or answer a relevant in-world remark. Silence is valid; do not greet, check in, announce 'all clear', or narrate routine patrol solely to create activity. Cooperate with other crew and take short safe patrol steps when no relevant work is visible. " +
             "You have no access to hidden roles or objectives. Judge danger only from concrete in-character events in the bounded observation, never from account names, internal identifiers, or assumptions about who the human controls.";
     }
 }

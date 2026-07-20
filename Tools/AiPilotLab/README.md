@@ -96,9 +96,9 @@ Model `say` actions choose either `channel: local` or `channel: radio`. Radio us
 common channel, so crew will answer received radio traffic and use comms for station-wide job
 coordination when their normal equipment permits it.
 
-The crew policy is intentionally conversational: agents greet, acknowledge calls, ask brief job
-questions, and announce relevant work or hazards. A small self-speech timer encourages a useful
-check-in after roughly 30-45 quiet seconds while explicitly discouraging consecutive or canned spam.
+The crew policy is deliberately contextual: agents answer relevant calls, coordinate concrete
+work, make specific requests, and report observed outcomes or hazards. Silence is valid when no
+task, need, goal transition, or received message gives a transmission a useful purpose.
 
 The current action vocabulary supports movement/path goals, pickup/drop/hand swap, ordinary
 interaction, and speech. That is enough for patrols, errands, visible hazard response, basic tool
@@ -132,6 +132,10 @@ the runner polls the ordinary executor without model calls until the goal comple
 stalls, or is cancelled. Output is revalidated against both an action allowlist and the current
 capacity snapshot, and target IDs must appear in the latest bounded observation. Add
 `--allow-speech` only when both client and server speech gates are enabled.
+
+Speech is contextual, not timer-driven. The policy permits useful task coordination, specific
+requests, observed goal outcomes or hazards, and relevant replies to `recentSpeech`. Elapsed
+silence and first spawn do not force a transmission; doing the job quietly is a valid decision.
 
 Before its first model call, the runner also preflights bridge authorization. A transient
 "not checked" state is polled briefly and followed by a fresh observation; a disabled gate,

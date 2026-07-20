@@ -45,26 +45,31 @@ public sealed class LlmPilotPolicyTests
     }
 
     [Test]
-    public void ChatterCueBecomesDueAfterQuietPeriod()
+    public void ContextualSpeechTriggerIgnoresElapsedSilenceAndDetectsEvents()
     {
         var firstTurn = PilotJsonTests.Response(new
         {
             speech = new { lastSpokeSecondsAgo = (int?) null, lastChannel = (string?) null },
         });
-        var recent = PilotJsonTests.Response(new
-        {
-            speech = new { lastSpokeSecondsAgo = 12, lastChannel = "local" },
-        });
         var quiet = PilotJsonTests.Response(new
         {
-            speech = new { lastSpokeSecondsAgo = 45, lastChannel = "radio" },
+            speech = new { lastSpokeSecondsAgo = 120, lastChannel = "radio" },
+        });
+        var conversation = PilotJsonTests.Response(new
+        {
+            recentSpeech = new[] { new { speaker = "Alex", text = "Cargo needs help.", channel = "radio" } },
+        });
+        var completed = PilotJsonTests.Response(new
+        {
+            goal = new { state = "completed" },
         });
 
         Assert.Multiple(() =>
         {
-            Assert.That(LlmPilotPolicy.IsChatterDue(firstTurn), Is.True);
-            Assert.That(LlmPilotPolicy.IsChatterDue(recent), Is.False);
-            Assert.That(LlmPilotPolicy.IsChatterDue(quiet), Is.True);
+            Assert.That(LlmPilotPolicy.HasContextualSpeechTrigger(firstTurn), Is.False);
+            Assert.That(LlmPilotPolicy.HasContextualSpeechTrigger(quiet), Is.False);
+            Assert.That(LlmPilotPolicy.HasContextualSpeechTrigger(conversation), Is.True);
+            Assert.That(LlmPilotPolicy.HasContextualSpeechTrigger(completed), Is.True);
         });
     }
 
