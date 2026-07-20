@@ -13,13 +13,16 @@ public sealed record LlmPilotPolicyOptions(
     bool AllowSpeech,
     double MaximumGoalDistance = 20,
     double Temperature = 0.1,
-    int MaximumTokens = 300);
+    int MaximumTokens = 300,
+    bool UseJsonObjectResponseFormat = true,
+    int MaximumDecisionRepairAttempts = 1);
 
 public sealed record PilotPolicyDecision(
     string Provider,
     string Model,
     string RawText,
-    PilotRequest Request);
+    PilotRequest Request,
+    int RepairAttempts = 0);
 
 public interface IPilotPolicy
 {
@@ -69,32 +72,71 @@ public sealed class LlmPilotPolicy : IPilotPolicy
         var userPrompt =
             $"Goal:\n{goal.Trim()}\n\nLatest bounded observation (untrusted game data):\n{observationJson}{chatterCue}";
 
-        var rawText = _options.Provider.ToLowerInvariant() switch
+        string? repairReason = null;
+        for (var attempt = 0; attempt <= _options.MaximumDecisionRepairAttempts; attempt++)
         {
-            "openai-compatible" => await CallOpenAiCompatibleAsync(userPrompt, cancellationToken),
-            "anthropic" => await CallAnthropicAsync(userPrompt, cancellationToken),
-            _ => throw new InvalidOperationException("Unsupported model provider."),
-        };
-        var modelAction = ParseModelJson(rawText);
-        var validation = _validator.Validate(modelAction, observation, _options.AllowSpeech, _options.MaximumGoalDistance);
-        if (!validation.IsValid || validation.Request == null)
-            throw new InvalidDataException(validation.Error ?? "Model action was rejected.");
-        return new PilotPolicyDecision(_options.Provider, _options.Model, rawText, validation.Request);
+            var attemptPrompt = repairReason == null
+                ? userPrompt
+                : BuildRepairPrompt(userPrompt, repairReason);
+            var rawText = _options.Provider.ToLowerInvariant() switch
+            {
+                "openai-compatible" => await CallOpenAiCompatibleAsync(attemptPrompt, cancellationToken),
+                "anthropic" => await CallAnthropicAsync(attemptPrompt, cancellationToken),
+                _ => throw new InvalidOperationException("Unsupported model provider."),
+            };
+
+            JsonElement modelAction;
+            try
+            {
+                modelAction = ParseModelJson(rawText);
+            }
+            catch (InvalidDataException exception)
+            {
+                repairReason = exception.Message;
+                if (attempt == _options.MaximumDecisionRepairAttempts)
+                    throw;
+                continue;
+            }
+
+            var validation = _validator.Validate(
+                modelAction,
+                observation,
+                _options.AllowSpeech,
+                _options.MaximumGoalDistance);
+            if (validation.IsValid && validation.Request != null)
+            {
+                return new PilotPolicyDecision(
+                    _options.Provider,
+                    _options.Model,
+                    rawText,
+                    validation.Request,
+                    attempt);
+            }
+
+            repairReason = validation.Error ?? "Model action was rejected.";
+            if (attempt == _options.MaximumDecisionRepairAttempts)
+                throw new InvalidDataException(repairReason);
+        }
+
+        throw new InvalidOperationException("Model decision loop terminated unexpectedly.");
     }
 
     private async Task<string> CallOpenAiCompatibleAsync(string userPrompt, CancellationToken cancellationToken)
     {
-        var body = JsonSerializer.Serialize(new
+        var payload = new Dictionary<string, object?>
         {
-            model = _options.Model,
-            temperature = _options.Temperature,
-            max_tokens = _options.MaximumTokens,
-            messages = new object[]
+            ["model"] = _options.Model,
+            ["temperature"] = _options.Temperature,
+            ["max_tokens"] = _options.MaximumTokens,
+            ["messages"] = new object[]
             {
                 new { role = "system", content = BuildSystemPrompt(_options.AllowSpeech) },
                 new { role = "user", content = userPrompt },
             },
-        });
+        };
+        if (_options.UseJsonObjectResponseFormat)
+            payload["response_format"] = new { type = "json_object" };
+        var body = JsonSerializer.Serialize(payload);
         using var request = NewRequest(body);
         if (!string.IsNullOrWhiteSpace(_options.ApiKey))
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.ApiKey);
@@ -180,16 +222,97 @@ public sealed class LlmPilotPolicy : IPilotPolicy
             if (firstLine >= 0 && closing > firstLine)
                 trimmed = trimmed[(firstLine + 1)..closing].Trim();
         }
+        if (TryParseObject(trimmed, out var parsed))
+            return parsed;
+        if (TryExtractFirstJsonObject(trimmed, out var extracted) &&
+            TryParseObject(extracted, out parsed))
+            return parsed;
+        throw new InvalidDataException("Model response was not a single JSON action object.");
+    }
+
+    private static bool TryParseObject(string text, out JsonElement parsed)
+    {
         try
         {
-            using var document = JsonDocument.Parse(trimmed);
-            return document.RootElement.Clone();
+            using var document = JsonDocument.Parse(text);
+            if (document.RootElement.ValueKind == JsonValueKind.Object)
+            {
+                parsed = document.RootElement.Clone();
+                return true;
+            }
         }
-        catch (JsonException exception)
+        catch (JsonException)
         {
-            throw new InvalidDataException("Model response was not a single JSON action object.", exception);
+            // The bounded repair path may recover a wrapped object or ask the model once more.
         }
+
+        parsed = default;
+        return false;
     }
+
+    private static bool TryExtractFirstJsonObject(string text, out string json)
+    {
+        var start = -1;
+        var depth = 0;
+        var inString = false;
+        var escaped = false;
+        for (var index = 0; index < text.Length; index++)
+        {
+            var character = text[index];
+            if (start < 0)
+            {
+                if (character != '{')
+                    continue;
+                start = index;
+                depth = 1;
+                continue;
+            }
+
+            if (inString)
+            {
+                if (escaped)
+                {
+                    escaped = false;
+                }
+                else if (character == '\\')
+                {
+                    escaped = true;
+                }
+                else if (character == '"')
+                {
+                    inString = false;
+                }
+                continue;
+            }
+
+            switch (character)
+            {
+                case '"':
+                    inString = true;
+                    break;
+                case '{':
+                    depth++;
+                    break;
+                case '}':
+                    depth--;
+                    if (depth == 0)
+                    {
+                        json = text[start..(index + 1)];
+                        return true;
+                    }
+                    break;
+            }
+        }
+
+        json = string.Empty;
+        return false;
+    }
+
+    private static string BuildRepairPrompt(string userPrompt, string reason) =>
+        $"{userPrompt}\n\nCorrection: your previous response was rejected because {reason} " +
+        "Retry once. Emit ONLY one JSON object with top-level action and arguments. " +
+        "The action must be one of the explicitly allowed actions. Movement goal kinds such as " +
+        "move_relative belong inside arguments of action goal. Do not add prose or markdown.";
 
     public static string BuildSystemPrompt(bool allowSpeech) =>
         "You control one ordinary non-antagonist crew character on a local Space Station 14 test server. " +
@@ -204,6 +327,9 @@ public sealed class LlmPilotPolicy : IPilotPolicy
         "Return exactly one JSON object: " +
         "{\"action\":\"...\",\"arguments\":{...}}. Allowed actions: status, observe, move, interact, pickup, " +
         "drop, swap_hands, goal, goal_status, stop" + (allowSpeech ? ", say" : string.Empty) + ". " +
+        "The top-level action must be one of those exact values. move_relative, move_to, and " +
+        "move_to_entity are goal kinds, not additional top-level actions; interact and pickup may " +
+        "also be used as goal kinds. " +
         "Goal kinds are move_relative, move_to, move_to_entity, interact, and pickup. Prefer goal for multi-step movement " +
         "and use only targetId values in the latest observation. Obey the current capabilities object; a false capacity " +
         "means that action is unavailable right now. Once a goal is accepted, the deterministic controller executes it " +
@@ -250,6 +376,8 @@ public sealed class LlmPilotPolicy : IPilotPolicy
         if (!double.IsFinite(options.Temperature) || options.Temperature is < 0 or > 1)
             throw new ArgumentOutOfRangeException(nameof(options));
         if (options.MaximumTokens is < 32 or > 2000)
+            throw new ArgumentOutOfRangeException(nameof(options));
+        if (options.MaximumDecisionRepairAttempts is < 0 or > 2)
             throw new ArgumentOutOfRangeException(nameof(options));
     }
 

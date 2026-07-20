@@ -68,7 +68,8 @@ internal static class Program
                     --endpoint URI --model MODEL [--api-key-env NAME] [--allow-speech]
               launch --client PATH --server ADDRESS
                      [--count N] [--scenario PATH | --goal TEXT | --crew ROSTER]
-                     [agent model options] [--pipe-prefix NAME] [--username-prefix NAME]
+                     [agent model options] [--startup-timeout-seconds N]
+                     [--pipe-prefix NAME] [--username-prefix NAME]
               moderation --action list|show|label|summary|export --incidents PATH [options]
 
             Model API keys are read only from an environment variable (MAFIA_LLM_KEY by default).
@@ -225,12 +226,20 @@ internal static class Program
         var output = ResolveOutputDirectory(arguments.Get("output"), "launch");
         Directory.CreateDirectory(output);
         var launcher = new ClientLauncher();
+        if (arguments.Has("startup-timeout-seconds") && arguments.Has("startup-seconds"))
+        {
+            throw new ArgumentException(
+                "Use only --startup-timeout-seconds; --startup-seconds is its legacy alias.");
+        }
+        var startupTimeoutOption = arguments.Has("startup-timeout-seconds")
+            ? "startup-timeout-seconds"
+            : "startup-seconds";
         var launcherOptions = new ClientLauncherOptions(
             arguments.Require("client"),
             arguments.Require("server"),
             Path.Combine(output, "clients"),
             arguments.Get("dotnet"),
-            TimeSpan.FromSeconds(arguments.GetInt("startup-seconds", 60, 1, 600)),
+            TimeSpan.FromSeconds(arguments.GetInt(startupTimeoutOption, 60, 1, 600)),
             arguments.GetMany("client-cvar"));
         await using var clients = await launcher.LaunchAsync(specs, launcherOptions, cancellationToken);
 
@@ -418,7 +427,9 @@ internal static class Program
             arguments.GetFlag("allow-speech"),
             arguments.GetDouble("max-goal-distance", 20, 1, 100),
             arguments.GetDouble("temperature", 0.1, 0, 1),
-            arguments.GetInt("max-tokens", 300, 32, 2000)));
+            arguments.GetInt("max-tokens", 300, 32, 2000),
+            !arguments.GetFlag("disable-json-object-mode"),
+            arguments.GetInt("model-repair-attempts", 1, 0, 2)));
     }
 
     private static JsonElement? ParseArguments(string? json)
