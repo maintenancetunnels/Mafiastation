@@ -28,6 +28,8 @@ internal static class Program
                 "send" => await SendAsync(arguments, cancellation.Token),
                 "scenario" => await ScenarioAsync(arguments, cancellation.Token),
                 "validate-scenario" => await ValidateScenarioAsync(arguments, cancellation.Token),
+                "crew" => await CrewAsync(arguments, cancellation.Token),
+                "validate-crew" => await ValidateCrewAsync(arguments, cancellation.Token),
                 "replay" => await ReplayAsync(arguments, cancellation.Token),
                 "agent" => await AgentAsync(arguments, cancellation.Token),
                 "launch" => await LaunchAsync(arguments, cancellation.Token),
@@ -57,11 +59,15 @@ internal static class Program
               send --pipe NAME --action ACTION [--args JSON]
               scenario --file PATH [--output DIR]
               validate-scenario --file PATH
+              crew --file ROSTER --provider openai-compatible|anthropic
+                   --endpoint URI --model MODEL [--allow-speech] [--output DIR]
+              validate-crew --file ROSTER
               replay --file JSONL [--pipe NAME] [--map BOT=PIPE] [--time-scale N]
                      [--allow-speech] [--allow-lifecycle]
               agent --pipe NAME --goal TEXT --provider openai-compatible|anthropic
                     --endpoint URI --model MODEL [--api-key-env NAME] [--allow-speech]
-              launch --client PATH --server ADDRESS [--count N] [--scenario PATH | --goal TEXT]
+              launch --client PATH --server ADDRESS
+                     [--count N] [--scenario PATH | --goal TEXT | --crew ROSTER]
                      [agent model options] [--pipe-prefix NAME] [--username-prefix NAME]
               moderation --action list|show|label|summary|export --incidents PATH [options]
 
@@ -101,6 +107,28 @@ internal static class Program
         Console.WriteLine(JsonSerializer.Serialize(summary, OutputJson));
         Console.WriteLine($"Artifacts: {output}");
         return summary.Success ? 0 : 1;
+    }
+
+    private static async Task<int> ValidateCrewAsync(
+        CommandLineArguments arguments,
+        CancellationToken cancellationToken)
+    {
+        var roster = await CrewRosterLoader.LoadAsync(arguments.Require("file"), cancellationToken);
+        Console.WriteLine(
+            $"Valid crew roster '{roster.Name}': {roster.Agents.Count} connected player agent(s).");
+        return 0;
+    }
+
+    private static async Task<int> CrewAsync(
+        CommandLineArguments arguments,
+        CancellationToken cancellationToken)
+    {
+        var roster = await CrewRosterLoader.LoadAsync(arguments.Require("file"), cancellationToken);
+        var output = ResolveOutputDirectory(arguments.Get("output"), $"crew-{roster.Name}");
+        Directory.CreateDirectory(output);
+        using var httpClient = NewModelHttpClient(arguments);
+        var policy = CreatePolicy(arguments, httpClient);
+        return await RunCrewAsync(roster, output, policy, cancellationToken);
     }
 
     private static async Task<int> ReplayAsync(CommandLineArguments arguments, CancellationToken cancellationToken)
@@ -166,17 +194,34 @@ internal static class Program
         PilotScenario? scenario = null;
         if (arguments.Get("scenario") is { } scenarioPath)
             scenario = await ScenarioLoader.LoadAsync(scenarioPath, cancellationToken);
+        CrewRoster? crew = null;
+        if (arguments.Get("crew") is { } crewPath)
+            crew = await CrewRosterLoader.LoadAsync(crewPath, cancellationToken);
         var goal = arguments.Get("goal");
-        if (scenario != null && !string.IsNullOrWhiteSpace(goal))
-            throw new ArgumentException("Launch accepts either --scenario or --goal, not both.");
+        var selectedModes = (scenario != null ? 1 : 0) +
+                            (crew != null ? 1 : 0) +
+                            (!string.IsNullOrWhiteSpace(goal) ? 1 : 0);
+        if (selectedModes > 1)
+            throw new ArgumentException("Launch accepts only one of --scenario, --goal, or --crew.");
 
         var pipePrefix = arguments.Get("pipe-prefix") ?? "mafiastation-pilot";
         var usernamePrefix = arguments.Get("username-prefix") ?? "Pilot";
-        var specs = scenario != null
-            ? scenario.Bots.Select((bot, index) => new ClientLaunchSpec(bot.Name, bot.Pipe, bot.Username ?? $"{usernamePrefix}{index + 1}")).ToArray()
-            : Enumerable.Range(1, arguments.GetInt("count", 1, 1, 32))
-                .Select(index => new ClientLaunchSpec($"pilot{index}", $"{pipePrefix}-{index}", $"{usernamePrefix}{index}"))
-                .ToArray();
+        var specs = crew != null
+            ? crew.Agents.Select(agent =>
+                new ClientLaunchSpec(agent.Name, agent.Pipe, agent.Username)).ToArray()
+            : scenario != null
+                ? scenario.Bots.Select((bot, index) =>
+                    new ClientLaunchSpec(
+                        bot.Name,
+                        bot.Pipe,
+                        bot.Username ?? $"{usernamePrefix}{index + 1}")).ToArray()
+                : Enumerable.Range(1, arguments.GetInt("count", 1, 1, 32))
+                    .Select(index =>
+                        new ClientLaunchSpec(
+                            $"pilot{index}",
+                            $"{pipePrefix}-{index}",
+                            $"{usernamePrefix}{index}"))
+                    .ToArray();
         var output = ResolveOutputDirectory(arguments.Get("output"), "launch");
         Directory.CreateDirectory(output);
         var launcher = new ClientLauncher();
@@ -197,6 +242,13 @@ internal static class Program
             Console.WriteLine(JsonSerializer.Serialize(summary, OutputJson));
             Console.WriteLine($"Artifacts: {output}");
             return summary.Success ? 0 : 1;
+        }
+
+        if (crew != null)
+        {
+            using var httpClient = NewModelHttpClient(arguments);
+            var policy = CreatePolicy(arguments, httpClient);
+            return await RunCrewAsync(crew, output, policy, cancellationToken);
         }
 
         if (!string.IsNullOrWhiteSpace(goal))
@@ -228,6 +280,26 @@ internal static class Program
         Console.WriteLine(JsonSerializer.Serialize(statuses, OutputJson));
         Console.WriteLine("No scenario or goal was supplied; clients were probed and cleanly stopped.");
         return allHealthy ? 0 : 1;
+    }
+
+    private static async Task<int> RunCrewAsync(
+        CrewRoster roster,
+        string output,
+        IPilotPolicy policy,
+        CancellationToken cancellationToken)
+    {
+        await using var recorder = new PilotRecorder(Path.Combine(output, "crew.jsonl"));
+        var runner = new CrewRunner(
+            agent => new PilotPipeClient(agent.Pipe, TimeSpan.FromSeconds(10)),
+            _ => policy);
+        var summary = await runner.RunAsync(roster, recorder, cancellationToken);
+        await File.WriteAllTextAsync(
+            Path.Combine(output, "crew-summary.json"),
+            JsonSerializer.Serialize(summary, OutputJson),
+            cancellationToken);
+        Console.WriteLine(JsonSerializer.Serialize(summary, OutputJson));
+        Console.WriteLine($"Artifacts: {output}");
+        return summary.Success ? 0 : 1;
     }
 
     private static async Task<int> ModerationAsync(

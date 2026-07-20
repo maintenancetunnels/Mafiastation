@@ -33,7 +33,7 @@ connection.
 | `drop` | Drop the active-hand item | Normal content input action |
 | `swap_hands` | Cycle the active hand | Normal content input action |
 | `ready` | Toggle lobby readiness | Separate server lifecycle gate |
-| `join` | Join through the normal game ticker | Loopback, account allowlist, and join gate |
+| `join` | Join through the normal game ticker as `arguments.job` | Loopback, account/job allowlists, available slot, and join gate |
 | `goal` | Start a deterministic move/interact/pickup goal | Server-validated target or bounded destination |
 | `goal_status` | Read current executor state | Read-only |
 | `stop` | Cancel the goal and release all held input | Always allowed when bridge is enabled |
@@ -49,14 +49,25 @@ diagnosed without exposing another control surface.
 
 ## Observation shape
 
-An observation contains attachment state, current map position, active hand, goal status, and a
-bounded nearest-first entity array. Entity entries contain only information already replicated to
-that client: opaque local ID, display name, prototype ID when available, relative position,
-distance, and interaction hints. Only top-level entities on the controlled character's current
-grid are included, excluding its inventory/body/action descendants. IDs expire from the target
-allowlist after a short observation window.
+An observation contains attachment state, current map position, active hand, coarse mob condition,
+goal status, and a bounded nearest-first entity array. Entity entries contain only information
+already replicated to that client: opaque local ID, display name, coarse kind (`character`, `item`,
+or `object`), coarse mob condition when applicable, relative position, distance, and interaction
+hints. Raw prototype IDs are not exposed. Only top-level entities on the controlled character's
+current grid are included, excluding its inventory/body/action descendants. IDs expire from the
+target allowlist after a short observation window.
+
+`recentSpeech` contains at most 16 local, whisper, or radio messages that the normal chat UI
+actually delivered to this client during the last three minutes. It excludes the controlled
+character's own messages and non-IC/hidden chat, normalizes whitespace, and caps each message at
+300 characters. This is the only dialogue memory supplied by the bridge; there is no global chat
+feed or direct model-to-model channel.
 
 Each observation also includes live booleans for movement, interaction, pickup, drop, hand swap,
 deterministic goals, observation, joining, and speech. The model validator rejects an action when
 its reported capacity is false. The bridge checks the same action blocker/hand state immediately
 before emitting input, and server-assisted goals are validated again by the server.
+
+On a successful `join`, the response includes `assignedJob`. Crew mode refuses to start the model
+unless this value is present and exactly matches its reviewed requested job. If a client is already
+joined, the server verifies its mind's actual job before treating the request as idempotent.

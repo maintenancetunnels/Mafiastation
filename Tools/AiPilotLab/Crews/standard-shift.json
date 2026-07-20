@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "name": "standard-shift",
+  "durationSeconds": 900,
+  "decisionIntervalMs": 5000,
+  "joinTimeoutSeconds": 60,
+  "agents": [
+    {
+      "name": "janitor",
+      "pipe": "mafiastation-crew-janitor",
+      "username": "CrewJanitor",
+      "job": "Janitor",
+      "temperament": "steady"
+    },
+    {
+      "name": "security",
+      "pipe": "mafiastation-crew-security",
+      "username": "CrewSecurity",
+      "job": "SecurityOfficer",
+      "temperament": "cautious"
+    },
+    {
+      "name": "doctor",
+      "pipe": "mafiastation-crew-doctor",
+      "username": "CrewDoctor",
+      "job": "MedicalDoctor",
+      "temperament": "sociable"
+    },
+    {
+      "name": "engineer",
+      "pipe": "mafiastation-crew-engineer",
+      "username": "CrewEngineer",
+      "job": "StationEngineer",
+      "temperament": "blunt"
+    },
+    {
+      "name": "cargo",
+      "pipe": "mafiastation-crew-cargo",
+      "username": "CrewCargo",
+      "job": "CargoTechnician",
+      "temperament": "curious"
+    }
+  ]
+}

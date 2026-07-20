@@ -20,7 +20,16 @@ The pilot is intentionally a two-key local test feature.
   disconnect. The deterministic executor has path, stall, distance, and wall-clock limits.
 - Observations are radius/count limited, expose only state already replicated to that client, and
   include only top-level world entities on the controlled character's grid—not inventory, organs,
-  actions, or other internal descendants.
+  actions, or other internal descendants. They expose coarse kinds and conditions rather than raw
+  entity prototype IDs.
+- Crew dialogue memory is limited to recent IC chat actually delivered by that client's normal chat
+  UI. There is no omniscient chat stream or hidden model-to-model bus.
+- Crew rosters accept only a reviewed catalog of ordinary jobs and temperaments. Unknown JSON
+  fields are rejected, so a roster cannot add a free-form secret mission or antagonist hint. The
+  runner verifies the server-assigned job before invoking any model.
+- Crew prompts explicitly deny hidden-role, objective, game-rule, administrator, and human-control
+  knowledge. Suspicion must be based on concrete speech or conduct perceived by that client. This
+  is an epistemic guardrail, not proof that a model will reason well; run artifacts remain auditable.
 - Replays suppress speech and lobby lifecycle actions unless explicitly enabled.
 - The launcher tracks process objects and terminates only headless clients it started.
 - API keys come from environment variables and are excluded from logs and command arguments.
@@ -33,9 +42,11 @@ are defense in depth, not a claim that autonomous public-server play is acceptab
 
 ## Suggested local test configuration
 
-Use dedicated accounts such as `Pilot1` and `Pilot2`, bind the game server to loopback, leave
-speech disabled for movement tests, use a low observation radius, and store run artifacts outside
-production log retention. Review model-generated speech before enabling its gate.
+Use dedicated accounts such as `CrewJanitor` and `CrewDoctor`, bind the game server to loopback,
+allowlist only the exact ordinary jobs in the roster, leave speech disabled for movement tests,
+use a low observation radius, and store run artifacts outside production log retention. Review
+model-generated speech before enabling its gate. The human antagonist should join independently;
+never encode that identity in a roster, model prompt, or endpoint-side shared context.
 
 ## Failure behavior
 

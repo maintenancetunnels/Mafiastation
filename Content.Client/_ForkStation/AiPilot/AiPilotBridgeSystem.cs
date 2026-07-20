@@ -198,7 +198,8 @@ public sealed partial class AiPilotBridgeSystem : EntitySystem
     private Task<AiPilotPipeResponse> RequestLifecycleAsync(
         AiPilotPipeRequest request,
         AiPilotLifecycleAction action,
-        bool ready)
+        bool ready,
+        string requestedJob)
     {
         var networkId = NextNetworkRequestId();
         var completion = new TaskCompletionSource<AiPilotPipeResponse>();
@@ -206,7 +207,8 @@ public sealed partial class AiPilotBridgeSystem : EntitySystem
             request.Id,
             _timing.CurTime + LifecycleResponseTimeout,
             completion);
-        RaiseNetworkEvent(new AiPilotLifecycleRequestEvent(networkId, action, ready));
+        RaiseNetworkEvent(
+            new AiPilotLifecycleRequestEvent(networkId, action, ready, requestedJob));
         return completion.Task;
     }
 
@@ -253,7 +255,15 @@ public sealed partial class AiPilotBridgeSystem : EntitySystem
 
         pending.Completion.TrySetResult(
             message.Accepted
-                ? AiPilotPipeResponse.Success(pending.PipeRequestId, new { accepted = true })
+                ? AiPilotPipeResponse.Success(
+                    pending.PipeRequestId,
+                    new
+                    {
+                        accepted = true,
+                        assignedJob = message.AssignedJob.Length > 0
+                            ? message.AssignedJob
+                            : null,
+                    })
                 : AiPilotPipeResponse.Failure(pending.PipeRequestId, message.Error));
     }
 

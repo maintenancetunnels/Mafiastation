@@ -8,7 +8,9 @@ using Content.Server.Station.Systems;
 using Content.Shared._ForkStation.AiPilot;
 using Content.Shared.CCVar;
 using Content.Shared.GameTicking;
+using Content.Shared.Mind;
 using Content.Shared.Roles;
+using Content.Shared.Roles.Jobs;
 using Robust.Shared.Configuration;
 using Robust.Shared.Map;
 using Robust.Shared.Network;
@@ -41,6 +43,8 @@ public sealed class AiPilotServerSystem : EntitySystem
     [Dependency] private readonly GameTicker _ticker = default!;
     [Dependency] private readonly StationSystem _stations = default!;
     [Dependency] private readonly StationJobsSystem _stationJobs = default!;
+    [Dependency] private readonly SharedMindSystem _mind = default!;
+    [Dependency] private readonly SharedJobSystem _jobs = default!;
 
     private readonly Dictionary<NetUserId, Queue<TimeSpan>> _requestTimes = new();
     private static readonly ISawmill Sawmill = Logger.GetSawmill("mafia.ai_pilot.server");
@@ -264,7 +268,7 @@ public sealed class AiPilotServerSystem : EntitySystem
                 return;
 
             case AiPilotLifecycleAction.Join:
-                TryJoin(session, message.RequestId);
+                TryJoin(session, message.RequestId, message.RequestedJob);
                 return;
 
             default:
@@ -277,7 +281,10 @@ public sealed class AiPilotServerSystem : EntitySystem
         }
     }
 
-    private void TryJoin(ICommonSession session, int requestId)
+    private void TryJoin(
+        ICommonSession session,
+        int requestId,
+        string requestedJob)
     {
         if (_ticker.RunLevel != GameRunLevel.InRound)
         {
@@ -289,25 +296,51 @@ public sealed class AiPilotServerSystem : EntitySystem
             return;
         }
 
-        if (_ticker.PlayerGameStatuses.TryGetValue(session.UserId, out var status) &&
-            status == PlayerGameStatus.JoinedGame)
-        {
-            // A lobby-disabled server may attach the client before its explicit join request is
-            // processed. Treat the desired state as achieved so join remains safe to retry.
-            SendLifecycleResult(session, requestId, true, string.Empty);
-            return;
-        }
-
         var allowedJobs = ParseCsv(_cfg.GetCVar(CCVars.MafiaAiPilotAllowedJobs));
-        var jobId = _cfg.GetCVar(CCVars.MafiaAiPilotDefaultJob).Trim();
-        if (!allowedJobs.Contains(jobId) ||
+        var jobId = requestedJob?.Trim() ?? string.Empty;
+        if (jobId.Length == 0)
+            jobId = _cfg.GetCVar(CCVars.MafiaAiPilotDefaultJob).Trim();
+
+        if (jobId.Length is < 1 or > 64 ||
+            jobId.Any(char.IsControl) ||
+            !allowedJobs.Contains(jobId) ||
             !_prototypes.TryIndex<JobPrototype>(jobId, out var job))
         {
             SendLifecycleResult(
                 session,
                 requestId,
                 false,
-                "The configured pilot default job is missing or not allowlisted.");
+                "The requested pilot job is missing or not allowlisted.");
+            return;
+        }
+
+        if (_ticker.PlayerGameStatuses.TryGetValue(session.UserId, out var status) &&
+            status == PlayerGameStatus.JoinedGame)
+        {
+            if (!TryGetAssignedJob(session, out var assignedJob))
+            {
+                SendLifecycleResult(
+                    session,
+                    requestId,
+                    false,
+                    "Pilot is already attached, but its assigned job could not be verified.");
+                return;
+            }
+
+            if (!string.Equals(assignedJob, jobId, StringComparison.OrdinalIgnoreCase))
+            {
+                SendLifecycleResult(
+                    session,
+                    requestId,
+                    false,
+                    $"Pilot is already joined as {assignedJob}, not requested job {jobId}.",
+                    assignedJob);
+                return;
+            }
+
+            // A lobby-disabled server may attach the client before its explicit join request is
+            // processed. Treat the desired, verified job state as achieved so join is retryable.
+            SendLifecycleResult(session, requestId, true, string.Empty, assignedJob);
             return;
         }
 
@@ -337,7 +370,21 @@ public sealed class AiPilotServerSystem : EntitySystem
         _ticker.MakeJoinGame(session, selectedStation.Value, jobId);
         Sawmill.Info(
             $"Allowlisted local AI pilot account {session.Name} requested late join as {jobId}.");
-        SendLifecycleResult(session, requestId, true, string.Empty);
+        SendLifecycleResult(session, requestId, true, string.Empty, jobId);
+    }
+
+    private bool TryGetAssignedJob(ICommonSession session, out string jobId)
+    {
+        jobId = string.Empty;
+        if (!_mind.TryGetMind(session.UserId, out var mindId, out _) ||
+            !_jobs.MindTryGetJobId(mindId, out var assigned) ||
+            assigned == null)
+        {
+            return false;
+        }
+
+        jobId = assigned.Value.Id;
+        return true;
     }
 
     private void SendAuthorization(ICommonSession session, int requestId)
@@ -453,10 +500,11 @@ public sealed class AiPilotServerSystem : EntitySystem
         ICommonSession session,
         int requestId,
         bool accepted,
-        string error)
+        string error,
+        string assignedJob = "")
     {
         RaiseNetworkEvent(
-            new AiPilotLifecycleResultEvent(requestId, accepted, error),
+            new AiPilotLifecycleResultEvent(requestId, accepted, error, assignedJob),
             session.Channel);
     }
 

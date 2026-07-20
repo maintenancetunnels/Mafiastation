@@ -51,6 +51,52 @@ that documented loopback alias for an allowlist entry of `Pilot1`. Give simultan
 allowlisted usernames. The explicit `join` operation is idempotent when a lobby-disabled test
 server has already attached the client.
 
+## Run an ordinary LLM crew against a hidden human antagonist
+
+Crew mode launches real connected headless clients, deterministically late-joins each one into a
+reviewed ordinary job, and then gives each client an independent bounded model loop. The roster
+contains job and temperament only; it has no mission, antagonist, or operator-identity field.
+
+Configure a loopback server with an active round and enough slots for the requested jobs:
+
+```text
+mafia.ai_pilot.server_enabled true
+mafia.ai_pilot.allowed_accounts CrewJanitor,CrewSecurity,CrewDoctor,CrewEngineer,CrewCargo
+mafia.ai_pilot.allow_join true
+mafia.ai_pilot.allowed_jobs Janitor,SecurityOfficer,MedicalDoctor,StationEngineer,CargoTechnician
+mafia.ai_pilot.allow_speech true
+```
+
+Validate and launch the supplied five-person roster against a cheap local OpenAI-compatible model:
+
+```powershell
+& $dotnet run --project .\Tools\AiPilotLab\AiPilotLab.csproj -- validate-crew `
+  --file .\Tools\AiPilotLab\Crews\standard-shift.json
+
+& $dotnet run --project .\Tools\AiPilotLab\AiPilotLab.csproj -- launch `
+  --client .\bin\Content.Client\Content.Client.dll `
+  --server 127.0.0.1:1212 `
+  --crew .\Tools\AiPilotLab\Crews\standard-shift.json `
+  --provider openai-compatible `
+  --endpoint http://127.0.0.1:11434/v1/chat/completions `
+  --model cheap-local-model `
+  --allow-speech `
+  --client-cvar mafia.ai_pilot.client_allow_speech=true
+```
+
+Join separately as the antagonist. Do not put that fact in the roster or model endpoint. Each crew
+model receives only its reviewed job brief, its own bounded visible observation, and chat messages
+that its client actually received. One crew member's normal `say` or radio message can therefore
+enter another member's `recentSpeech`, allowing ordinary player-to-player conversation without a
+privileged bot backchannel. Job assignment is verified before a model is started and fails closed
+if the server assigned anything else.
+
+The current action vocabulary supports movement/path goals, pickup/drop/hand swap, ordinary
+interaction, and speech. That is enough for patrols, errands, visible hazard response, basic tool
+use, and coordination; complex machine, inventory, medical, and construction UIs are not yet
+automated. See [crew-mode.md](../../docs/ai-pilot/crew-mode.md) for the behavioral boundary and
+extension path.
+
 ## Run a cheap model policy
 
 A local OpenAI-compatible endpoint can run without an API key:

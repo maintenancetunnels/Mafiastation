@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Threading.Tasks;
 using Content.Client.Chat.Managers;
 using Content.Client.GameTicking.Managers;
+using Content.Client.UserInterface.Systems.Chat;
 using Content.Shared._ForkStation.AiPilot;
 using Content.Shared.ActionBlocker;
 using Content.Shared.CCVar;
@@ -12,12 +13,15 @@ using Content.Shared.Hands.EntitySystems;
 using Content.Shared.Input;
 using Content.Shared.Interaction;
 using Content.Shared.Item;
+using Content.Shared.Mobs.Components;
+using Content.Shared.Mobs.Systems;
 using Content.Shared.Movement.Components;
 using Content.Shared.Movement.Systems;
 using Robust.Client.GameObjects;
 using Robust.Client.Input;
 using Robust.Client.Mafiastation.AiPilot;
 using Robust.Client.Player;
+using Robust.Client.UserInterface;
 using Robust.Shared.Input;
 using Robust.Shared.Map;
 using Robust.Shared.Timing;
@@ -30,6 +34,9 @@ public sealed partial class AiPilotBridgeSystem
     private const float GoalWaypointTolerance = 0.35f;
     private const float GoalProgressEpsilon = 0.03f;
     private const float GoalStallSeconds = 4f;
+    private const int MaximumRecentSpeech = 16;
+    private const int MaximumObservedSpeechCharacters = 300;
+    private static readonly TimeSpan ObservedSpeechMemory = TimeSpan.FromMinutes(3);
 
     [Dependency] private readonly IInputManager _inputManager = default!;
     [Dependency] private readonly IChatManager _chat = default!;
@@ -38,11 +45,16 @@ public sealed partial class AiPilotBridgeSystem
     [Dependency] private readonly SharedHandsSystem _hands = default!;
     [Dependency] private readonly ClientGameTicker _ticker = default!;
     [Dependency] private readonly SharedMoverController _mover = default!;
+    [Dependency] private readonly IUserInterfaceManager _ui = default!;
+    [Dependency] private readonly MobStateSystem _mobState = default!;
 
     private InputSystem _input = default!;
     private readonly Dictionary<int, ObservedTargetLease> _observedTargets = new();
     private readonly Dictionary<EntityUid, int> _observedEntityIds = new();
     private readonly HashSet<BoundKeyFunction> _heldMovement = new();
+    private readonly Queue<PilotObservedSpeech> _recentSpeech = new();
+    private ChatUIController? _chatController;
+    private EntityUid? _speechOwner;
     private ActivePilotGoal? _goal;
     private TimeSpan _manualMoveDeadline;
     private int _nextObservedId;
@@ -50,10 +62,15 @@ public sealed partial class AiPilotBridgeSystem
     partial void InitializeActions()
     {
         _input = EntityManager.System<InputSystem>();
+        _chatController = _ui.GetUIController<ChatUIController>();
+        _chatController.MessageAdded += OnChatMessage;
     }
 
     partial void ShutdownActions()
     {
+        if (_chatController != null)
+            _chatController.MessageAdded -= OnChatMessage;
+        _chatController = null;
         CancelAllActions("AI pilot bridge shut down.");
         _observedTargets.Clear();
         _observedEntityIds.Clear();
@@ -83,6 +100,40 @@ public sealed partial class AiPilotBridgeSystem
             _goal.State = AiPilotGoalState.Cancelled;
             _goal.Error = reason;
         }
+        ClearSpeechMemory();
+    }
+
+    private void OnChatMessage(ChatMessage message)
+    {
+        if (!_cfg.GetCVar(CCVars.MafiaAiPilotClientEnabled) ||
+            message.HideChat ||
+            message.Channel is not (ChatChannel.Local or ChatChannel.Whisper or ChatChannel.Radio) ||
+            _players.LocalEntity is not { } controlled)
+        {
+            return;
+        }
+
+        EnsureSpeechOwner(controlled);
+        var sender = GetEntity(message.SenderEntity);
+        if (sender == controlled)
+            return;
+
+        var text = NormalizeObservedSpeech(message.Message);
+        if (text.Length == 0)
+            return;
+
+        var speaker = sender.IsValid() && Exists(sender)
+            ? Name(sender)
+            : message.Channel == ChatChannel.Radio
+                ? "radio speaker"
+                : "unknown speaker";
+        while (_recentSpeech.Count >= MaximumRecentSpeech)
+            _recentSpeech.Dequeue();
+        _recentSpeech.Enqueue(new PilotObservedSpeech(
+            _timing.CurTime,
+            speaker,
+            text,
+            message.Channel.ToString().ToLowerInvariant()));
     }
 
     partial void OnPathResult(AiPilotPathResultEvent message)
@@ -214,6 +265,7 @@ public sealed partial class AiPilotBridgeSystem
         if (_players.LocalEntity is not { } controlled ||
             !TryComp(controlled, out TransformComponent? controlledTransform))
         {
+            ClearSpeechMemory();
             return AiPilotPipeResponse.Success(
                 request.Id,
                 new
@@ -223,15 +275,18 @@ public sealed partial class AiPilotBridgeSystem
                     capabilities = BuildCapabilities(),
                     goal = BuildGoalStatus(),
                     entities = Array.Empty<object>(),
+                    recentSpeech = Array.Empty<object>(),
                 });
         }
 
+        EnsureSpeechOwner(controlled);
+        PruneObservedSpeech();
         var selfMap = _transform.GetMapCoordinates(controlled, controlledTransform);
         var radius = Math.Clamp(_authorization.ObservationRadius, 1f, 30f);
         var maximum = Math.Clamp(_authorization.MaximumObservedEntities, 1, 128);
         var candidates = new List<ObservedCandidate>();
         var query = AllEntityQuery<TransformComponent, MetaDataComponent>();
-        while (query.MoveNext(out var uid, out var transform, out var metadata))
+        while (query.MoveNext(out var uid, out var transform, out _))
         {
             // Offer top-level world entities on the controlled character's grid. Inventory,
             // organs, actions, and other transform descendants share the actor's map position
@@ -248,7 +303,7 @@ public sealed partial class AiPilotBridgeSystem
             if (!float.IsFinite(distance) || distance > radius)
                 continue;
 
-            candidates.Add(new ObservedCandidate(uid, metadata, map.Position, distance));
+            candidates.Add(new ObservedCandidate(uid, map.Position, distance));
         }
 
         candidates.Sort(static (left, right) => left.Distance.CompareTo(right.Distance));
@@ -262,7 +317,12 @@ public sealed partial class AiPilotBridgeSystem
                 {
                     id,
                     name = Name(candidate.Uid),
-                    prototype = candidate.Metadata.EntityPrototype?.ID,
+                    kind = HasComp<MobStateComponent>(candidate.Uid)
+                        ? "character"
+                        : HasComp<ItemComponent>(candidate.Uid)
+                            ? "item"
+                            : "object",
+                    condition = GetMobCondition(candidate.Uid),
                     position = new
                     {
                         x = candidate.Position.X,
@@ -309,11 +369,69 @@ public sealed partial class AiPilotBridgeSystem
                     name = Name(controlled),
                     activeHand,
                     activeItem,
+                    condition = GetMobCondition(controlled),
                 },
                 capabilities = BuildCapabilities(),
                 goal = BuildGoalStatus(),
                 entities,
+                recentSpeech = _recentSpeech.Select(memory => new
+                {
+                    ageSeconds = (int) Math.Clamp(
+                        (_timing.CurTime - memory.ObservedAt).TotalSeconds,
+                        0,
+                        int.MaxValue),
+                    memory.Speaker,
+                    memory.Message,
+                    memory.Channel,
+                }).ToArray(),
             });
+    }
+
+    private void EnsureSpeechOwner(EntityUid controlled)
+    {
+        if (_speechOwner == controlled)
+            return;
+
+        _recentSpeech.Clear();
+        _speechOwner = controlled;
+    }
+
+    private string? GetMobCondition(EntityUid uid)
+    {
+        if (!TryComp<MobStateComponent>(uid, out var state))
+            return null;
+        if (_mobState.IsAlive(uid, state))
+            return "alive";
+        if (_mobState.IsCritical(uid, state))
+            return "critical";
+        if (_mobState.IsDead(uid, state))
+            return "dead";
+        return "unknown";
+    }
+
+    private void ClearSpeechMemory()
+    {
+        _recentSpeech.Clear();
+        _speechOwner = null;
+    }
+
+    private void PruneObservedSpeech()
+    {
+        var oldest = _timing.CurTime - ObservedSpeechMemory;
+        while (_recentSpeech.TryPeek(out var speech) && speech.ObservedAt < oldest)
+            _recentSpeech.Dequeue();
+    }
+
+    private static string NormalizeObservedSpeech(string message)
+    {
+        var normalized = string.Join(
+            " ",
+            message.Split(
+                new[] { ' ', '\t', '\r', '\n' },
+                StringSplitOptions.RemoveEmptyEntries));
+        return normalized.Length <= MaximumObservedSpeechCharacters
+            ? normalized
+            : normalized[..MaximumObservedSpeechCharacters];
     }
 
     private object BuildCapabilities()
@@ -661,7 +779,11 @@ public sealed partial class AiPilotBridgeSystem
                     AiPilotPipeResponse.Failure(request.Id, "Pilot ready value must be boolean."));
             }
         }
-        return RequestLifecycleAsync(request, AiPilotLifecycleAction.Ready, ready);
+        return RequestLifecycleAsync(
+            request,
+            AiPilotLifecycleAction.Ready,
+            ready,
+            requestedJob: string.Empty);
     }
 
     private Task<AiPilotPipeResponse> RequestJoinAsync(AiPilotPipeRequest request)
@@ -671,7 +793,24 @@ public sealed partial class AiPilotBridgeSystem
                 AiPilotPipeResponse.Failure(
                     request.Id,
                     "Pilot ready/join gate is disabled."));
-        return RequestLifecycleAsync(request, AiPilotLifecycleAction.Join, ready: false);
+
+        var requestedJob = string.Empty;
+        if (request.Arguments.Contains("job") &&
+            (!TryReadString(request.Arguments, "job", out requestedJob) ||
+             requestedJob.Length > 64 ||
+             requestedJob.Any(char.IsControl)))
+        {
+            return Task.FromResult(
+                AiPilotPipeResponse.Failure(
+                    request.Id,
+                    "Pilot job must be a non-empty ID of at most 64 characters."));
+        }
+
+        return RequestLifecycleAsync(
+            request,
+            AiPilotLifecycleAction.Join,
+            ready: false,
+            requestedJob: requestedJob);
     }
 
     private AiPilotPipeResponse PerformSpeech(AiPilotPipeRequest request)
@@ -1071,9 +1210,14 @@ public sealed partial class AiPilotBridgeSystem
 
     private sealed record ObservedCandidate(
         EntityUid Uid,
-        MetaDataComponent Metadata,
         Vector2 Position,
         float Distance);
+
+    private sealed record PilotObservedSpeech(
+        TimeSpan ObservedAt,
+        string Speaker,
+        string Message,
+        string Channel);
 
     private sealed class ObservedTargetLease(EntityUid entity, TimeSpan expiresAt)
     {

@@ -110,20 +110,24 @@ public sealed class AiPilotPathResultEvent(
 public sealed class AiPilotLifecycleRequestEvent(
     int requestId,
     AiPilotLifecycleAction action,
-    bool ready) : EntityEventArgs
+    bool ready,
+    string requestedJob) : EntityEventArgs
 {
     public int RequestId { get; } = requestId;
     public AiPilotLifecycleAction Action { get; } = action;
     public bool Ready { get; } = ready;
+    public string RequestedJob { get; } = requestedJob;
 }
 
 [Serializable, NetSerializable]
 public sealed class AiPilotLifecycleResultEvent(
     int requestId,
     bool accepted,
-    string error) : EntityEventArgs
+    string error,
+    string assignedJob) : EntityEventArgs
 {
     public int RequestId { get; } = requestId;
     public bool Accepted { get; } = accepted;
     public string Error { get; } = error;
+    public string AssignedJob { get; } = assignedJob;
 }
