@@ -15,7 +15,7 @@ param(
     [int]$Crew = 5,
     [string]$Provider = 'openai-compatible',
     [string]$Endpoint = 'https://api.openai.com/v1/chat/completions',
-    [string]$Model = 'gpt-5-mini',
+    [string]$Model = 'gpt-5.4-nano',
     [int]$DurationSeconds = 3600,
     [string]$Goal = 'You are a crew member aboard a Nanotrasen space station. Do your job, explore, and talk with your crewmates in character. React honestly to anything strange: flickering lights, whispers, announcements that do not add up, statues you do not remember. Trust is optional.',
     [switch]$NoLlm
