@@ -1,3 +1,4 @@
+using Content.Server._ForkStation.LlmDirector;
 using Content.Server.Station.Events;
 using Content.Server.Station.Systems;
 using Content.Shared.CCVar;
@@ -27,6 +28,10 @@ public sealed class HybridCrewSpawnSystem : EntitySystem
     [Dependency] private readonly IPrototypeManager _protos = default!;
     [Dependency] private readonly StationSystem _station = default!;
     [Dependency] private readonly SharedMapSystem _map = default!;
+    [Dependency] private readonly LlmNpcDialogueSystem _dialogue = default!;
+
+    private const string CrewPersona =
+        "A wary station crew member. Speak in short, natural first-person lines. React to what you see and hear.";
 
     private static readonly ISawmill Log = Logger.GetSawmill("mafia.crew");
 
@@ -68,14 +73,25 @@ public sealed class HybridCrewSpawnSystem : EntitySystem
             return;
         }
 
+        // Dialogue system enforces a hard 30s floor on the interval.
+        var interval = Math.Max(30f, _cfg.GetCVar(CCVars.MafiaDirectorNpcDialogueMinimumDecisionSeconds));
+        var configured = 0;
         for (var i = 0; i < count; i++)
         {
             var tile = _random.Pick(tiles);
             var coords = _map.GridTileToLocal(grid, gridComp, tile.GridIndices);
-            Spawn(prototype, coords);
+            var npc = Spawn(prototype, coords);
+
+            // Wire the goal-driven NPC to also SPEAK: the dialogue system only processes
+            // entities that carry LlmNpcDialogueComponent, which the command normally adds
+            // per-entity. Configure it here so auto-spawned crew can talk, not just move.
+            if (_dialogue.TryConfigureNpc(npc, interval, CrewPersona, out var error))
+                configured++;
+            else
+                Log.Warning($"Dialogue configure failed for crew NPC: {error}");
         }
 
-        Log.Info($"Spawned {count} hybrid LLM crew ('{prototype}') on the station floor. " +
-                 "Routine = HTN; escalation = LLM director (mafia.director.npc_hybrid_enabled).");
+        Log.Info($"Spawned {count} hybrid LLM crew ('{prototype}') on the station floor; " +
+                 $"{configured} wired for dialogue. Routine = HTN; escalation = LLM director.");
     }
 }
