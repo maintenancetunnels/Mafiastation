@@ -1,35 +1,43 @@
+# _CE ZLevels player actions. Adapted to our base's action schema: icon/checkCanInteract
+# live on the Action component (parent BaseAction), the event on InstantAction.
 - type: entity
+  parent: BaseAction
   id: CEActionZLevelUp
   name: Move up
   description: Move up one Z-Level
   components:
-  - type: InstantAction
+  - type: Action
     checkCanInteract: false
     icon:
       sprite: _CE/Actions/zLevels.rsi
       state: up
+  - type: InstantAction
     event: !type:CEZLevelActionUp
 
 - type: entity
+  parent: BaseAction
   id: CEActionZLevelDown
   name: Move down
   description: Move down one Z-Level
   components:
-  - type: InstantAction
+  - type: Action
     checkCanInteract: false
     icon:
       sprite: _CE/Actions/zLevels.rsi
       state: down
+  - type: InstantAction
     event: !type:CEZLevelActionDown
 
 - type: entity
+  parent: BaseAction
   id: CEActionToggleLookUp
   name: Look up
   description: You lift your head and look up at the sky.
   components:
-  - type: InstantAction
+  - type: Action
     checkCanInteract: false
     icon:
       sprite: _CE/Actions/zLevels.rsi
       state: eye
+  - type: InstantAction
     event: !type:CEToggleZLevelLookUpAction
