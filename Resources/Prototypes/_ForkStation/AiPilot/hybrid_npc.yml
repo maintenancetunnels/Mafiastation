@@ -10,6 +10,16 @@
         - !type:HTNCompoundTask
           task: IdleCompound
 
+# These are simulated crew rather than silent test dummies. Their headset is ordinary station
+# equipment: radio transmission still passes through the normal channel, hands, cuffs, speech,
+# and telecom checks.
+- type: startingGear
+  id: MafiaHybridPrisonerGear
+  equipment:
+    jumpsuit: ClothingUniformJumpsuitColorGrey
+    shoes: ClothingShoesColorBlack
+    ears: ClothingHeadsetGrey
+
 # Admin-spawnable local laboratory actor. This is deliberately not wired into the persistent
 # prisoner job: player prisoners continue to be players, while this prototype validates the
 # server-owned NPC half of the hybrid architecture.
@@ -20,6 +30,8 @@
   description: A local-test humanoid whose routine behavior is ordinary HTN.
   suffix: AI PILOT LAB, NPC
   components:
+    - type: Loadout
+      prototypes: [MafiaHybridPrisonerGear]
     - type: HTN
       rootTask:
         task: MafiaHybridPrisonerRoutine

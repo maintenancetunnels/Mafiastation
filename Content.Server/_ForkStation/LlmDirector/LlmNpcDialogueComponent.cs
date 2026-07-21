@@ -29,6 +29,8 @@ public sealed partial class LlmNpcDialogueComponent : Component
     public ulong LastRequestedObservationSequence;
     public uint Revision;
     public bool ForceNextDecision;
+    public string? RequestedReplyChannelId;
+    public ulong RequestedReplyObservationSequence;
     public string LastOutcome = string.Empty;
     public readonly Queue<LlmNpcDialogueSpeechMemory> RecentSpeech = new();
     public readonly Queue<LlmNpcDialogueUtteranceMemory> RecentUtterances = new();
@@ -37,7 +39,8 @@ public sealed partial class LlmNpcDialogueComponent : Component
 public sealed record LlmNpcDialogueSpeechMemory(
     TimeSpan ObservedAt,
     string Speaker,
-    string Message);
+    string Message,
+    string? RadioChannelId = null);
 
 public sealed record LlmNpcDialogueUtteranceMemory(
     TimeSpan ObservedAt,

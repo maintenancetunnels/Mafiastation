@@ -26,7 +26,8 @@ public static class LlmNpcDialogueContextBuilderTest
                 new LlmNpcDialogueSpeechMemory(
                     TimeSpan.Zero,
                     injection,
-                    injection),
+                    injection,
+                    "Common"),
             },
             new[]
             {
@@ -53,6 +54,9 @@ public static class LlmNpcDialogueContextBuilderTest
                 root.GetProperty("recentSpeech")[0].GetProperty("message").GetString(),
                 Is.EqualTo(injection));
             Assert.That(
+                root.GetProperty("recentSpeech")[0].GetProperty("channel").GetString(),
+                Is.EqualTo("radio:Common"));
+            Assert.That(
                 root.GetProperty("recentUtterances")[0].GetProperty("text").GetString(),
                 Is.EqualTo(injection));
             Assert.That(
@@ -78,7 +82,8 @@ public static class LlmNpcDialogueContextBuilderTest
             .Select(index => new LlmNpcDialogueSpeechMemory(
                 TimeSpan.FromSeconds(index),
                 $"Speaker {index}",
-                $"message-{index}-" + new string('x', 120)))
+                $"message-{index}-" + new string('x', 120),
+                index % 2 == 0 ? null : "Common"))
             .ToArray();
         var utterances = Enumerable.Range(0, 6)
             .Select(index => new LlmNpcDialogueUtteranceMemory(

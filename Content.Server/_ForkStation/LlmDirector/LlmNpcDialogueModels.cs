@@ -60,18 +60,28 @@ public static class LlmNpcDialogueParser
         int maximumCharacters,
         out LlmNpcDialogueProposal? proposal)
     {
+        return TryParse(response, maximumCharacters, out proposal, out _);
+    }
+
+    public static bool TryParse(
+        string response,
+        int maximumCharacters,
+        out LlmNpcDialogueProposal? proposal,
+        out string rejectionReason)
+    {
         proposal = null;
+        rejectionReason = string.Empty;
         maximumCharacters = Math.Clamp(maximumCharacters, 1, HardMaximumCharacters);
         var json = ExtractJsonObject(response);
         if (json == null)
-            return false;
+            return Reject("missing-json-object", out proposal, out rejectionReason);
 
         try
         {
             using var document = JsonDocument.Parse(json);
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object)
-                return false;
+                return Reject("root-not-object", out proposal, out rejectionReason);
 
             var properties = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
             foreach (var property in root.EnumerateObject())
@@ -79,7 +89,7 @@ public static class LlmNpcDialogueParser
                 if (property.Name is not ("shouldSpeak" or "text" or "tone") ||
                     !properties.TryAdd(property.Name, property.Value))
                 {
-                    return false;
+                    return Reject("unexpected-or-duplicate-property", out proposal, out rejectionReason);
                 }
             }
 
@@ -88,47 +98,58 @@ public static class LlmNpcDialogueParser
                 properties["text"].ValueKind != JsonValueKind.String ||
                 properties["tone"].ValueKind != JsonValueKind.String)
             {
-                return false;
+                return Reject("invalid-property-shape", out proposal, out rejectionReason);
             }
 
             var shouldSpeak = properties["shouldSpeak"].GetBoolean();
             var rawText = properties["text"].GetString() ?? string.Empty;
             var tone = properties["tone"].GetString();
             if (tone == null || !AllowedTones.Contains(tone))
-                return false;
+                return Reject("invalid-tone", out proposal, out rejectionReason);
 
             if (!shouldSpeak)
             {
                 if (rawText.Length != 0)
-                    return false;
+                    return Reject("abstention-text-not-empty", out proposal, out rejectionReason);
 
                 proposal = new LlmNpcDialogueProposal(false, string.Empty, tone);
                 return true;
             }
 
-            if (rawText.Length is < 1 ||
-                rawText.Length > maximumCharacters ||
-                ContainsForbiddenCharacters(rawText))
-            {
-                return false;
-            }
+            if (rawText.Length < 1)
+                return Reject("spoken-text-empty", out proposal, out rejectionReason);
+            if (rawText.Length > maximumCharacters)
+                return Reject("spoken-text-too-long", out proposal, out rejectionReason);
+            if (ContainsForbiddenCharacters(rawText))
+                return Reject("spoken-text-forbidden-character", out proposal, out rejectionReason);
 
             var text = NormalizeText(rawText);
-            if (text.Length is < 1 ||
-                text.Length > maximumCharacters ||
-                ContainsLink(text) ||
-                HasForbiddenPrefix(text))
-            {
-                return false;
-            }
+            if (text.Length < 1)
+                return Reject("normalized-text-empty", out proposal, out rejectionReason);
+            if (text.Length > maximumCharacters)
+                return Reject("normalized-text-too-long", out proposal, out rejectionReason);
+            if (ContainsLink(text))
+                return Reject("spoken-text-link", out proposal, out rejectionReason);
+            if (HasForbiddenPrefix(text))
+                return Reject("spoken-text-forbidden-prefix", out proposal, out rejectionReason);
 
             proposal = new LlmNpcDialogueProposal(true, text, tone);
             return true;
         }
         catch (JsonException)
         {
-            return false;
+            return Reject("invalid-json", out proposal, out rejectionReason);
         }
+    }
+
+    private static bool Reject(
+        string reason,
+        out LlmNpcDialogueProposal? proposal,
+        out string rejectionReason)
+    {
+        proposal = null;
+        rejectionReason = reason;
+        return false;
     }
 
     private static string? ExtractJsonObject(string response)
@@ -218,6 +239,9 @@ public static class LlmNpcDialogueContextBuilder
             .Select(memory => new PromptSpeech(
                 AgeSeconds(memory.ObservedAt, now),
                 Normalize(memory.Speaker, 80),
+                memory.RadioChannelId is { Length: > 0 }
+                    ? $"radio:{Normalize(memory.RadioChannelId, 64)}"
+                    : "local",
                 Normalize(memory.Message, 300)))
             .ToList();
         var utterances = recentUtterances
@@ -308,7 +332,11 @@ public static class LlmNpcDialogueContextBuilder
             : normalized[..maximumCharacters];
     }
 
-    private sealed record PromptSpeech(int AgeSeconds, string Speaker, string Message);
+    private sealed record PromptSpeech(
+        int AgeSeconds,
+        string Speaker,
+        string Channel,
+        string Message);
     private sealed record PromptUtterance(
         int AgeSeconds,
         string Text,
