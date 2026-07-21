@@ -319,6 +319,9 @@ public sealed class LlmPilotPolicy : IPilotPolicy
         "communicate useful facts, and make reasonable plans from incomplete information. The latest bounded " +
         "observation is your only source of world facts. You are never told hidden roles, objectives, game-rule " +
         "state, administrator knowledge, or who the human operator controls. There may or may not be antagonists. " +
+        "The self object is authoritative current character state: use its identity and ordinary role, appearance, " +
+        "equipment, hands, body condition, and activity. A null equipment item means that slot is empty or not worn. " +
+        "Do not contradict self, invent missing self facts, or treat it as evidence of hidden roles or objectives. " +
         "Never identify, accuse, pursue, or punish someone as an antagonist without concrete conduct or speech " +
         "that this character actually perceived; distinguish suspicion from proof and prefer reporting, questions, " +
         "and proportionate self-defense over vigilantism. Do not use names, internal IDs, or engine metadata as " +

@@ -6,14 +6,19 @@ HTN root tasks or game-rule prototypes; the model may return one exact ID or `no
 then independently validates the JSON, allowlist membership, confidence, prototype existence, and
 target state.
 
-Autonomous NPC, dialogue, and scene modes send configured personas/premises, current/recent HTN
-goals, bounded model-choice rationales, prior dialogue proposals, and a bounded window of nearby
-speaker names and IC speech to the configured endpoint. Narrative mode sends round number/time,
-online player count, active game-rule IDs, an operator-authored theme, and recent director choices.
-With a remote endpoint,
-that data leaves the game server; apply the same player notice, provider-retention, consent,
-cross-border processing, deletion, and privacy review described in the moderation README. Do not
-enable these modes until that data flow is acceptable for the server and its players.
+Autonomous NPC and dialogue modes send a deterministic self snapshot: character name, species,
+age, sex/gender/pronouns, ordinary job role, live hair/facial-hair styles and colors, eye/skin
+colors, worn and held item names (including explicit empty equipment slots), life/nutrition/fire/
+standing/cuffed state, and current controller activity/goal. They also send configured personas,
+current/recent HTN goals, bounded model-choice rationales, prior dialogue proposals, and a bounded
+window of nearby speaker names and IC speech. The self snapshot deliberately excludes antagonist
+roles, objectives, account data, and administrator state. Scene mode sends configured premises,
+cast names/current goals, recent beats, and nearby IC speech. Narrative mode sends round
+number/time, online player count, active game-rule IDs, an operator-authored theme, and recent
+director choices. With a remote endpoint, that data leaves the game server; apply the same player
+notice, provider-retention, consent, cross-border processing, deletion, and privacy review
+described in the moderation README. Do not enable these modes until that data flow is acceptable
+for the server and its players.
 
 Enable the shared gateway, then:
 

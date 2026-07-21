@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Text.Json;
+using Content.Shared._ForkStation.AiPilot;
 
 namespace Content.Server._ForkStation.LlmDirector;
 
@@ -21,9 +22,11 @@ public static class LlmNpcContextBuilder
         IReadOnlyList<LlmNpcGoalMemory> recentGoals,
         IReadOnlyList<LlmNpcDecisionMemory> recentDecisions,
         TimeSpan now,
-        int maximumCharacters = 1800)
+        int maximumCharacters = 1800,
+        AiSelfSnapshot? self = null)
     {
         maximumCharacters = Math.Clamp(maximumCharacters, 256, 2000);
+        var boundedSelf = self;
         var boundedPersona = Normalize(persona, 600);
         var boundedCurrentGoal = Normalize(currentGoal, 128);
         var speech = recentSpeech
@@ -51,6 +54,7 @@ public static class LlmNpcContextBuilder
             var json = JsonSerializer.Serialize(
                 new
                 {
+                    self = boundedSelf,
                     persona = boundedPersona,
                     currentGoal = boundedCurrentGoal,
                     recentGoals = goals,
@@ -84,6 +88,12 @@ public static class LlmNpcContextBuilder
             {
                 var overflow = Math.Max(32, json.Length - maximumCharacters);
                 boundedPersona = boundedPersona[..Math.Max(0, boundedPersona.Length - overflow)];
+                continue;
+            }
+
+            if (boundedSelf != null)
+            {
+                boundedSelf = null;
                 continue;
             }
 

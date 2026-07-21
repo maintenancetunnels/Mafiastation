@@ -53,6 +53,13 @@ public sealed partial class LlmNpcHybridComponent : Component
     [DataField]
     public string Persona = string.Empty;
 
+    /// <summary>
+    /// Optional reviewed job prototype used as role knowledge when this server NPC has no mind.
+    /// A real mind-assigned job always takes precedence in the self snapshot.
+    /// </summary>
+    [DataField]
+    public string RoleId = string.Empty;
+
     [DataField]
     public float EvaluationIntervalSeconds = 1f;
 

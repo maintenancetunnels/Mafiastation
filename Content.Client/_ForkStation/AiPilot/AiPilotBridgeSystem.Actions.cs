@@ -47,6 +47,7 @@ public sealed partial class AiPilotBridgeSystem
     [Dependency] private readonly SharedMoverController _mover = default!;
     [Dependency] private readonly IUserInterfaceManager _ui = default!;
     [Dependency] private readonly MobStateSystem _mobState = default!;
+    [Dependency] private readonly AiSelfSnapshotSystem _selfSnapshot = default!;
 
     private InputSystem _input = default!;
     private readonly Dictionary<int, ObservedTargetLease> _observedTargets = new();
@@ -354,6 +355,10 @@ public sealed partial class AiPilotBridgeSystem
             if (_hands.GetActiveItem((controlled, hands)) is { } item)
                 activeItem = Name(item);
         }
+        var selfSnapshot = _selfSnapshot.Capture(
+            controlled,
+            BuildSelfActivity(),
+            _assignedJobId);
 
         return AiPilotPipeResponse.Success(
             request.Id,
@@ -373,6 +378,12 @@ public sealed partial class AiPilotBridgeSystem
                     activeHand,
                     activeItem,
                     condition = GetMobCondition(controlled),
+                    identity = selfSnapshot.Identity,
+                    appearance = selfSnapshot.Appearance,
+                    equipment = selfSnapshot.Equipment,
+                    hands = selfSnapshot.Hands,
+                    body = selfSnapshot.Body,
+                    activity = selfSnapshot.Activity,
                 },
                 capabilities = BuildCapabilities(),
                 goal = BuildGoalStatus(),
@@ -389,6 +400,28 @@ public sealed partial class AiPilotBridgeSystem
                 }).ToArray(),
                 speech = BuildSpeechState(),
             });
+    }
+
+    private AiSelfActivity BuildSelfActivity()
+    {
+        if (_goal != null)
+        {
+            string? target = null;
+            if (_goal.Target is { } targetUid && Exists(targetUid))
+                target = Name(targetUid);
+
+            return new AiSelfActivity(
+                "pilot",
+                GoalStateName(_goal.State),
+                _goal.Kind,
+                target,
+                _goal.FinalAction.ToString().ToLowerInvariant());
+        }
+
+        if (_manualMoveDeadline > _timing.CurTime)
+            return new AiSelfActivity("pilot", "moving", "manual_move", null, null);
+
+        return AiSelfActivity.Idle("pilot");
     }
 
     private void EnsureSpeechOwner(EntityUid controlled)

@@ -41,6 +41,7 @@
           task: IdleSpinCompound
           description: Stay put, remain observant, and avoid making the situation more chaotic.
       persona: A cautious station prisoner. Prefer compliance and self-preservation over confrontation.
+      roleId: Prisoner
       evaluationIntervalSeconds: 1
       noPlanEscalationSeconds: 8
       decisionCooldownSeconds: 60

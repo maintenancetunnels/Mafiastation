@@ -92,6 +92,13 @@ enter another member's `recentSpeech`, allowing ordinary player-to-player conver
 privileged bot backchannel. Job assignment is verified before a model is started and fails closed
 if the server assigned anything else.
 
+The observation's self object is a deterministic live snapshot of the controlled character:
+name, species and profile, ordinary job role, hair/facial-hair styles and colors (including
+explicit bald/clean-shaven state), eye and skin colors, every worn slot including empty slots,
+hands and held items, body condition, and current controller activity/goal. A null equipment item
+means that slot is empty or not worn. The snapshot excludes antagonist roles, objectives, account
+data, and administrator state.
+
 Model `say` actions choose either `channel: local` or `channel: radio`. Radio uses the ordinary `;`
 common channel, so crew will answer received radio traffic and use comms for station-wide job
 coordination when their normal equipment permits it.

@@ -2,12 +2,15 @@ using System.Linq;
 using System.Numerics;
 using Content.Server.Administration.Logs;
 using Content.Server.NPC.HTN;
+using Content.Shared._ForkStation.AiPilot;
 using Content.Shared.ActionBlocker;
 using Content.Shared.CCVar;
 using Content.Shared.Chat;
 using Content.Shared.Database;
 using Content.Shared.Hands.Components;
+using Content.Shared.Roles;
 using Robust.Shared.Configuration;
+using Robust.Shared.Log;
 using Robust.Shared.Player;
 using Robust.Shared.Prototypes;
 using Robust.Shared.Timing;
@@ -35,7 +38,9 @@ public sealed class LlmNpcHybridSystem : EntitySystem
     [Dependency] private readonly HTNSystem _htn = default!;
     [Dependency] private readonly LlmGameplayDirectorSystem _director = default!;
     [Dependency] private readonly IAdminLogManager _adminLogs = default!;
+    [Dependency] private readonly AiSelfSnapshotSystem _selfSnapshot = default!;
 
+    private static readonly ISawmill Sawmill = Logger.GetSawmill("mafia.llm.npc-hybrid");
     private TimeSpan _nextUpdate;
 
     public override void Initialize()
@@ -145,7 +150,22 @@ public sealed class LlmNpcHybridSystem : EntitySystem
                 continue;
             }
 
-            TryRequestEscalation(uid, hybrid, htn, reason, ignoreCooldown: false, out _);
+            if (TryRequestEscalation(
+                    uid,
+                    hybrid,
+                    htn,
+                    reason,
+                    ignoreCooldown: false,
+                    out var escalationError))
+            {
+                Sawmill.Info(
+                    $"Queued hybrid escalation for {ToPrettyString(uid)}: {reason}.");
+            }
+            else
+            {
+                Sawmill.Warning(
+                    $"Hybrid escalation for {ToPrettyString(uid)} was refused: {escalationError}");
+            }
         }
     }
 
@@ -291,6 +311,7 @@ public sealed class LlmNpcHybridSystem : EntitySystem
 
     private void OnHybridEnabledChanged(bool enabled)
     {
+        Sawmill.Info($"Hybrid NPC executive gate changed: enabled={enabled}.");
         if (enabled)
             return;
 
@@ -402,6 +423,18 @@ public sealed class LlmNpcHybridSystem : EntitySystem
             .Select(goal => new DirectorChoiceOption(goal.Id, goal.Description))
             .ToArray();
         var capabilityText = string.Join(", ", available.OrderBy(capability => capability));
+        var activity = new AiSelfActivity(
+            "htn",
+            component.PendingDecision
+                ? "awaiting_executive"
+                : component.ComplexGoalActive
+                    ? "executing_complex_goal"
+                    : htn.Plan == null
+                        ? "no_plan"
+                        : "executing_routine",
+            component.ComplexGoalActive ? component.ActiveGoalId : htn.RootTask.Task,
+            null,
+            htn.RootTask.Task);
         var context =
             LlmNpcContextBuilder.Build(
                 component.Persona,
@@ -409,7 +442,8 @@ public sealed class LlmNpcHybridSystem : EntitySystem
                 component.RecentSpeech.ToArray(),
                 Array.Empty<LlmNpcGoalMemory>(),
                 Array.Empty<LlmNpcDecisionMemory>(),
-                now) +
+                now,
+                self: _selfSnapshot.Capture(uid, activity, component.RoleId)) +
             $"\nEscalation reason: {reason}.\nAvailable capacities: {capabilityText}.";
         if (context.Length > 2000)
             context = context[..2000];
@@ -556,6 +590,15 @@ public sealed class LlmNpcHybridSystem : EntitySystem
         {
             error =
                 $"Hybrid NPC persona cannot exceed {MaximumPersonaCharacters} characters.";
+            return false;
+        }
+
+        if (component.RoleId.Length > 64 ||
+            component.RoleId.Any(char.IsControl) ||
+            (component.RoleId.Length > 0 &&
+             !_prototypes.HasIndex<JobPrototype>(component.RoleId)))
+        {
+            error = $"Hybrid NPC configured role is invalid or missing: '{component.RoleId}'.";
             return false;
         }
 

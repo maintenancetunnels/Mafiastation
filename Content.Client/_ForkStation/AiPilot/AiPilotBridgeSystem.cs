@@ -36,6 +36,7 @@ public sealed partial class AiPilotBridgeSystem : EntitySystem
     private TimeSpan _nextAuthorizationRequest;
     private TimeSpan _nextBridgeStartAttempt;
     private TimeSpan _nextSpeechAt;
+    private string? _assignedJobId;
     private int _networkRequestId;
 
     public override void Initialize()
@@ -252,6 +253,9 @@ public sealed partial class AiPilotBridgeSystem : EntitySystem
     {
         if (!_pendingLifecycle.TryRemove(message.RequestId, out var pending))
             return;
+
+        if (message.Accepted && message.AssignedJob.Length > 0)
+            _assignedJobId = message.AssignedJob;
 
         pending.Completion.TrySetResult(
             message.Accepted

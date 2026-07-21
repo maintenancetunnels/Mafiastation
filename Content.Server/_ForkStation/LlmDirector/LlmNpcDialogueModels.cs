@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Text.Json;
+using Content.Shared._ForkStation.AiPilot;
 
 namespace Content.Server._ForkStation.LlmDirector;
 
@@ -205,9 +206,11 @@ public static class LlmNpcDialogueContextBuilder
         IReadOnlyList<LlmNpcDialogueSpeechMemory> recentSpeech,
         IReadOnlyList<LlmNpcDialogueUtteranceMemory> recentUtterances,
         TimeSpan now,
-        int maximumCharacters = 1800)
+        int maximumCharacters = 1800,
+        AiSelfSnapshot? self = null)
     {
         maximumCharacters = Math.Clamp(maximumCharacters, 256, 2000);
+        var boundedSelf = self;
         var boundedName = Normalize(name, 80);
         var boundedPersona = Normalize(persona, 800);
         var boundedCurrentGoal = Normalize(currentGoal, 128);
@@ -236,6 +239,7 @@ public static class LlmNpcDialogueContextBuilder
                         persona = boundedPersona,
                         currentGoal = boundedCurrentGoal,
                     },
+                    self = boundedSelf,
                     recentUtterances = utterances,
                     recentSpeech = speech,
                     reminder =
@@ -262,6 +266,12 @@ public static class LlmNpcDialogueContextBuilder
                 var overflow = Math.Max(32, json.Length - maximumCharacters);
                 boundedPersona =
                     boundedPersona[..Math.Max(0, boundedPersona.Length - overflow)];
+                continue;
+            }
+
+            if (boundedSelf != null)
+            {
+                boundedSelf = null;
                 continue;
             }
 

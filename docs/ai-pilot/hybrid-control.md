@@ -71,6 +71,26 @@ Automatic escalation can occur when:
 Losing a required capacity ends a complex lease early. Attaching a player to the entity suspends
 hybrid supervision, and periodic `LlmNpcAutonomyComponent` cannot be configured on the same NPC.
 
+## Embodied self-context
+
+Both connected pilots and server-owned autonomy/hybrid/dialogue NPCs use the same deterministic
+AiSelfSnapshotSystem. Immediately before a model request or connected-client observation, it reads
+the controlled entity's current components and produces:
+
+- identity: name, species, age, sex/gender/pronouns, and ordinary job role;
+- appearance: hair and facial-hair styles/colors, explicit bald/clean-shaven state, and eye/skin
+  colors;
+- equipment and hands: every inventory slot (a null item means empty/not worn), active hand, and
+  held item names;
+- body: alive/critical/dead, hunger, thirst, fire, standing, and cuffed state;
+- activity: deterministic controller, state, goal, target, and detail.
+
+A real mind-assigned job is authoritative. A reviewed prototype roleId is only a fallback for a
+server-owned NPC with no mind. The snapshot never exposes antagonist roles, objectives, account
+identity, administrator state, or facts about another character. It is bounded current state, not
+free-form model memory: changing clothes, hands, appearance, condition, or goal changes the next
+snapshot. These fields are part of the data sent to the configured model endpoint.
+
 ## Laboratory NPC
 
 `MobMafiaHybridPrisoner` is an admin-spawnable test actor. Its routine root,

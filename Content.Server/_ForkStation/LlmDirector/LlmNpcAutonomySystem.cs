@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Numerics;
 using Content.Server.NPC.HTN;
+using Content.Shared._ForkStation.AiPilot;
 using Content.Shared.CCVar;
 using Content.Shared.Chat;
 using Robust.Shared.Configuration;
@@ -28,6 +29,7 @@ public sealed class LlmNpcAutonomySystem : EntitySystem
     [Dependency] private readonly IGameTiming _timing = default!;
     [Dependency] private readonly SharedTransformSystem _transform = default!;
     [Dependency] private readonly LlmGameplayDirectorSystem _director = default!;
+    [Dependency] private readonly AiSelfSnapshotSystem _selfSnapshot = default!;
     private TimeSpan _nextUpdate;
 
     public override void Initialize()
@@ -96,13 +98,20 @@ public sealed class LlmNpcAutonomySystem : EntitySystem
                     id,
                     $"Configured high-level HTN goal '{id}' for this NPC."))
                 .ToArray();
+            var activity = new AiSelfActivity(
+                "htn",
+                htn.Plan == null ? "no_plan" : "executing",
+                htn.RootTask.Task,
+                null,
+                null);
             var context = LlmNpcContextBuilder.Build(
                 autonomy.Persona,
                 htn.RootTask.Task,
                 autonomy.RecentSpeech.ToArray(),
                 autonomy.RecentGoals.ToArray(),
                 autonomy.RecentDecisions.ToArray(),
-                now);
+                now,
+                self: _selfSnapshot.Capture(uid, activity));
 
             _director.TryRequestNpcGoal(
                 requester: null,

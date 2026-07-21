@@ -9,6 +9,20 @@ namespace Mafiastation.AiPilotLab.Tests;
 public sealed class LlmPilotPolicyTests
 {
     [Test]
+    public void SystemPromptDefinesAuthoritativeSelfContext()
+    {
+        var prompt = LlmPilotPolicy.BuildSystemPrompt(false);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(prompt, Does.Contain("self object is authoritative current character state"));
+            Assert.That(prompt, Does.Contain("null equipment item"));
+            Assert.That(prompt, Does.Contain("appearance"));
+            Assert.That(prompt, Does.Contain("hidden roles or objectives"));
+        });
+    }
+
+    [Test]
     public void AllowsUnauthenticatedHttpOnlyForLoopback()
     {
         using var client = new HttpClient();
