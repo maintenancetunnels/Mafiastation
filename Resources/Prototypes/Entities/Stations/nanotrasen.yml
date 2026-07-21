@@ -36,6 +36,14 @@
   categories: [ HideSpawnMenu ]
   components:
     - type: Transform
+    # _CE ZLevels: real stacked decks. Below the station is a genuine z-level you can
+    # descend into (with rendering, gravity, falling); above is open sky. Populated
+    # basement decks are authored map files dropped into mapsBelow.
+    - type: CEStationZLevels
+      mapsBelow:
+        - /Maps/_CE/empty.yml
+      mapsAbove:
+        - /Maps/_CE/clouds.yml
 
 - type: entity
   id: NanotrasenCentralCommand
