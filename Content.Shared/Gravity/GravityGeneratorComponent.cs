@@ -6,6 +6,10 @@ namespace Content.Shared.Gravity;
 [RegisterComponent, NetworkedComponent, AutoGenerateComponentState]
 public sealed partial class GravityGeneratorComponent : Component
 {
+    // _CE ZLevels: mass cap for z-fall gravity handling.
+    [DataField]
+    public float MaxHandledMass;
+
     [DataField] public float LightRadiusMin { get; set; }
     [DataField] public float LightRadiusMax { get; set; }
 

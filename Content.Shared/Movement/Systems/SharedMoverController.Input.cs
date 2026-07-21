@@ -638,7 +638,7 @@ namespace Content.Shared.Movement.Systems
     }
 
     [Flags]
-    public enum ShuttleButtons : byte
+    public enum ShuttleButtons : ushort // _CE ZLevels: widened for the z-level vertical controls
     {
         None = 0,
         StrafeUp = 1 << 0,
@@ -648,6 +648,9 @@ namespace Content.Shared.Movement.Systems
         RotateLeft = 1 << 4,
         RotateRight = 1 << 5,
         Brake = 1 << 6,
+        // _CE ZLevels: z-level vertical flight
+        AscendZ = 1 << 7,
+        DescendZ = 1 << 8,
     }
 
 }

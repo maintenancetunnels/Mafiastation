@@ -41,6 +41,11 @@ namespace Content.Shared.Maps
 
         [DataField("isSubfloor")] public bool IsSubFloor { get; private set; }
 
+        // _CE ZLevels: a transparent tile (space, lattice, open shaft) lets you see and fall
+        // through to the level below. Drives multi-Z rendering and gravity.
+        [DataField]
+        public bool Transparent = false;
+
         [DataField("baseTurf")]
         public ProtoId<ContentTileDefinition>? BaseTurf { get; private set; }
 
