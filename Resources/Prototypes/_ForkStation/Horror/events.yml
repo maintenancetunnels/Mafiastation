@@ -1,13 +1,16 @@
-# Mafiastation horror events. Nested into the upstream event pools via
-# MafiastationCalmEventsTable / MafiastationAntagEventsTable (see GameRules/events.yml).
-
+# Mafiastation horror events.
+#
+# DESIGN: horror is exceptionally rare and damning — an ENTITY, not ambient noise.
+# The random pools carry ONLY the two entity-driven tentpoles (the blackout stalker and
+# the doppelganger), each at very low weight, a long lead-in before it can occur, and a
+# long cooldown between occurrences — so a shift usually passes with nothing, and when
+# something does happen it lands hard. Everything is primarily admin-initiated via
+# `forcerule <id>`; the ambient flavor events below stay forcerule-only and never fire
+# on their own.
 - type: entityTable
   id: MafiastationCalmEventsTable
   table: !type:AllSelector
     children:
-    - id: LiminalFlicker
-    - id: PhantomAnnouncement
-    - id: WhisperEvent
     - id: Doppelganger
 
 - type: entityTable
@@ -16,37 +19,7 @@
     children:
     - id: BlackoutHunt
 
-# Lights across the station flicker for a while. No announcement, no explanation.
-- type: entity
-  parent: BaseStationEventShortDelay
-  id: LiminalFlicker
-  components:
-  - type: StationEvent
-    weight: 8
-    duration: 45
-    maxDuration: 90
-  - type: LiminalFlickerRule
-
-# The announcer lies: one official-sounding announcement that is subtly wrong.
-- type: entity
-  parent: BaseStationEventShortDelay
-  id: PhantomAnnouncement
-  components:
-  - type: StationEvent
-    weight: 8
-    duration: 1
-  - type: PhantomAnnouncementRule
-
-# Random crew members receive whispers nobody sent. Sometimes the whisper knows their name.
-- type: entity
-  parent: BaseStationEventShortDelay
-  id: WhisperEvent
-  components:
-  - type: StationEvent
-    weight: 6
-    duration: 60
-    maxDuration: 120
-  - type: WhisperRule
+# === Damning entity events (rare random + admin-initiated) ===
 
 # A motionless, naked copy of a random crew member stands in maintenance.
 # It crumbles to ash when approached. Nobody believes the witness.
@@ -55,7 +28,10 @@
   id: Doppelganger
   components:
   - type: StationEvent
-    weight: 5
+    weight: 2
+    earliestStart: 30      # not before 30 min into the shift
+    reoccurrenceDelay: 60  # at most once per hour
+    minimumPlayers: 2
     duration: 300
     maxDuration: 480
   - type: DoppelgangerRule
@@ -66,7 +42,10 @@
   id: BlackoutHunt
   components:
   - type: StationEvent
-    weight: 5
+    weight: 2
+    earliestStart: 40      # only deep into a shift
+    reoccurrenceDelay: 90  # rarely, and never twice close together
+    minimumPlayers: 2
     duration: 90
     maxDuration: 150
     startAudio:
@@ -74,3 +53,37 @@
       params:
         volume: -4
   - type: BlackoutHuntRule
+
+# === Ambient flavor (admin-initiated only — NOT in any random pool) ===
+
+# Lights across the station flicker for a while. No announcement, no explanation.
+- type: entity
+  parent: BaseStationEventShortDelay
+  id: LiminalFlicker
+  components:
+  - type: StationEvent
+    weight: 0              # never chosen randomly; forcerule LiminalFlicker only
+    duration: 45
+    maxDuration: 90
+  - type: LiminalFlickerRule
+
+# The announcer lies: one official-sounding announcement that is subtly wrong.
+- type: entity
+  parent: BaseStationEventShortDelay
+  id: PhantomAnnouncement
+  components:
+  - type: StationEvent
+    weight: 0              # forcerule PhantomAnnouncement only
+    duration: 1
+  - type: PhantomAnnouncementRule
+
+# Random crew members receive whispers nobody sent. Sometimes the whisper knows their name.
+- type: entity
+  parent: BaseStationEventShortDelay
+  id: WhisperEvent
+  components:
+  - type: StationEvent
+    weight: 0              # forcerule WhisperEvent only
+    duration: 60
+    maxDuration: 120
+  - type: WhisperRule

@@ -18,4 +18,11 @@ public sealed partial class CCVars
     /// </summary>
     public static readonly CVarDef<string> MafiaCrewHybridPrototype =
         CVarDef.Create("mafia.crew.hybrid_prototype", "MobMafiaHybridPrisoner", CVar.SERVERONLY);
+
+    /// <summary>
+    /// Sandbox convenience: attach an infinite generator to the station's power net at round
+    /// start so an unmanned station stays lit. The rare BlackoutHunt event still cuts power.
+    /// </summary>
+    public static readonly CVarDef<bool> MafiaInfinitePower =
+        CVarDef.Create("mafia.infinite_power", true, CVar.SERVERONLY);
 }

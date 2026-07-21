@@ -24,6 +24,7 @@ if (-not $proxyUp) {
 $cv = @(
     '--cvar','game.lobbyenabled=false','--cvar','game.map=Asterisk',
     '--cvar','movement.mob_pushing=true',                                  # soft mob collision
+    '--cvar','events.enabled=true',                                        # only the 2 rare entity scares can fire; ambient is forcerule-only
     '--cvar','mafia.llm.enabled=true','--cvar','mafia.llm.allow_unauthenticated=true',
     '--cvar','mafia.llm.provider=openai-compatible',
     "--cvar","mafia.llm.endpoint=http://127.0.0.1:$CrewModelPort/v1/chat/completions",
