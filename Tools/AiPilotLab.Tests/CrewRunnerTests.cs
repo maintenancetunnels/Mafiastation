@@ -7,6 +7,43 @@ namespace Mafiastation.AiPilotLab.Tests;
 public sealed class CrewRunnerTests
 {
     [Test]
+    public async Task RetriesTransientAttachmentObservationTimeout()
+    {
+        var observeCalls = 0;
+        var transport = new FakeTransport(request => request.Action switch
+        {
+            "join" => Join(request, "Janitor"),
+            "observe" when ++observeCalls == 1 =>
+                throw new TimeoutException("Simulated busy client."),
+            "observe" => Exchange(request, new
+            {
+                attached = true,
+                authorized = true,
+                goal = new { state = "none" },
+            }),
+            "stop" => Exchange(request, new { accepted = true }),
+            _ => throw new AssertionException($"Unexpected action {request.Action}."),
+        });
+        var policy = new FakePolicy((_, _, _) =>
+            Task.FromResult(new PilotPolicyDecision(
+                "test",
+                "test",
+                """{"action":"stop","arguments":{}}""",
+                PilotRequest.Create("stop"))));
+        var runner = new CrewRunner(_ => transport, _ => policy);
+
+        var summary = await runner.RunAsync(Roster());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(observeCalls, Is.GreaterThanOrEqualTo(3));
+            Assert.That(summary.Success, Is.True);
+            Assert.That(summary.Agents[0].Joined, Is.True);
+            Assert.That(summary.Agents[0].SetupError, Is.Null);
+        });
+    }
+
+    [Test]
     public async Task JoinsRequestedJobBeforeStartingRolePolicy()
     {
         string? requestedJob = null;

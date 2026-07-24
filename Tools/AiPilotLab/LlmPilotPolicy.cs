@@ -15,7 +15,9 @@ public sealed record LlmPilotPolicyOptions(
     double Temperature = 0.1,
     int MaximumTokens = 300,
     bool UseJsonObjectResponseFormat = true,
-    int MaximumDecisionRepairAttempts = 1);
+    int MaximumDecisionRepairAttempts = 1,
+    string? ReasoningEffort = null,
+    int MaximumConcurrentRequests = 4);
 
 public sealed record PilotPolicyDecision(
     string Provider,
@@ -39,6 +41,7 @@ public sealed class LlmPilotPolicy : IPilotPolicy
     private readonly HttpClient _httpClient;
     private readonly LlmPilotPolicyOptions _options;
     private readonly PilotActionValidator _validator;
+    private readonly SemaphoreSlim _modelRequests;
 
     public LlmPilotPolicy(HttpClient httpClient, LlmPilotPolicyOptions options, PilotActionValidator? validator = null)
     {
@@ -46,6 +49,7 @@ public sealed class LlmPilotPolicy : IPilotPolicy
         _options = options;
         _validator = validator ?? new PilotActionValidator();
         ValidateOptions(options);
+        _modelRequests = new SemaphoreSlim(options.MaximumConcurrentRequests);
     }
 
     public async Task<PilotPolicyDecision> DecideAsync(
@@ -77,12 +81,7 @@ public sealed class LlmPilotPolicy : IPilotPolicy
             var attemptPrompt = repairReason == null
                 ? userPrompt
                 : BuildRepairPrompt(userPrompt, repairReason);
-            var rawText = _options.Provider.ToLowerInvariant() switch
-            {
-                "openai-compatible" => await CallOpenAiCompatibleAsync(attemptPrompt, cancellationToken),
-                "anthropic" => await CallAnthropicAsync(attemptPrompt, cancellationToken),
-                _ => throw new InvalidOperationException("Unsupported model provider."),
-            };
+            var rawText = await CallModelAsync(attemptPrompt, cancellationToken);
 
             JsonElement modelAction;
             try
@@ -120,6 +119,105 @@ public sealed class LlmPilotPolicy : IPilotPolicy
         throw new InvalidOperationException("Model decision loop terminated unexpectedly.");
     }
 
+    private async Task<string> CallModelAsync(string userPrompt, CancellationToken cancellationToken)
+    {
+        await _modelRequests.WaitAsync(cancellationToken);
+        try
+        {
+            return _options.Provider.ToLowerInvariant() switch
+            {
+                "openai-responses" => await CallOpenAiResponsesAsync(userPrompt, cancellationToken),
+                "openai-compatible" => await CallOpenAiCompatibleAsync(userPrompt, cancellationToken),
+                "anthropic" => await CallAnthropicAsync(userPrompt, cancellationToken),
+                _ => throw new InvalidOperationException("Unsupported model provider."),
+            };
+        }
+        finally
+        {
+            _modelRequests.Release();
+        }
+    }
+
+    private async Task<string> CallOpenAiResponsesAsync(string userPrompt, CancellationToken cancellationToken)
+    {
+        var payload = new Dictionary<string, object?>
+        {
+            ["model"] = _options.Model,
+            ["instructions"] = BuildSystemPrompt(_options.AllowSpeech),
+            ["input"] = userPrompt,
+            ["max_output_tokens"] = _options.MaximumTokens,
+            ["store"] = false,
+        };
+        if (!string.IsNullOrWhiteSpace(_options.ReasoningEffort))
+            payload["reasoning"] = new { effort = _options.ReasoningEffort };
+        if (_options.UseJsonObjectResponseFormat)
+            payload["text"] = new { format = new { type = "json_object" } };
+
+        using var request = NewRequest(JsonSerializer.Serialize(payload));
+        if (!string.IsNullOrWhiteSpace(_options.ApiKey))
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.ApiKey);
+        using var response = await _httpClient.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+        var responseBody = await ReadBoundedAsync(response, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            throw new HttpRequestException(
+                $"Model endpoint returned HTTP {(int) response.StatusCode}.",
+                null,
+                response.StatusCode);
+
+        using var document = JsonDocument.Parse(responseBody);
+        if (document.RootElement.TryGetProperty("output_text", out var directText) &&
+            directText.ValueKind == JsonValueKind.String)
+        {
+            return directText.GetString() ?? string.Empty;
+        }
+
+        if (!document.RootElement.TryGetProperty("output", out var output) ||
+            output.ValueKind != JsonValueKind.Array)
+        {
+            throw new InvalidDataException("OpenAI Responses result did not contain an output array.");
+        }
+
+        var text = new StringBuilder();
+        foreach (var item in output.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object ||
+                !item.TryGetProperty("type", out var itemType) ||
+                itemType.GetString() != "message" ||
+                !item.TryGetProperty("content", out var content) ||
+                content.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            foreach (var part in content.EnumerateArray())
+            {
+                if (part.ValueKind != JsonValueKind.Object ||
+                    !part.TryGetProperty("type", out var partType))
+                {
+                    continue;
+                }
+
+                if (partType.GetString() == "output_text" &&
+                    part.TryGetProperty("text", out var partText) &&
+                    partText.ValueKind == JsonValueKind.String)
+                {
+                    text.Append(partText.GetString());
+                }
+                else if (partType.GetString() == "refusal")
+                {
+                    throw new InvalidDataException("OpenAI Responses declined to produce a pilot action.");
+                }
+            }
+        }
+
+        if (text.Length == 0)
+            throw new InvalidDataException("OpenAI Responses result did not contain output text.");
+        return text.ToString();
+    }
+
     private async Task<string> CallOpenAiCompatibleAsync(string userPrompt, CancellationToken cancellationToken)
     {
         var payload = new Dictionary<string, object?>
@@ -133,6 +231,8 @@ public sealed class LlmPilotPolicy : IPilotPolicy
                 new { role = "user", content = userPrompt },
             },
         };
+        if (!string.IsNullOrWhiteSpace(_options.ReasoningEffort))
+            payload["reasoning_effort"] = _options.ReasoningEffort;
         if (_options.UseJsonObjectResponseFormat)
             payload["response_format"] = new { type = "json_object" };
         var body = JsonSerializer.Serialize(payload);
@@ -368,8 +468,12 @@ public sealed class LlmPilotPolicy : IPilotPolicy
 
     private static void ValidateOptions(LlmPilotPolicyOptions options)
     {
-        if (options.Provider is not ("openai-compatible" or "anthropic"))
-            throw new ArgumentException("Provider must be openai-compatible or anthropic.", nameof(options));
+        if (options.Provider is not ("openai-responses" or "openai-compatible" or "anthropic"))
+        {
+            throw new ArgumentException(
+                "Provider must be openai-responses, openai-compatible, or anthropic.",
+                nameof(options));
+        }
         if (string.IsNullOrWhiteSpace(options.Model) || options.Model.Length > 128)
             throw new ArgumentException("Model is required and must be at most 128 characters.", nameof(options));
         if (options.Endpoint.Scheme != Uri.UriSchemeHttps &&
@@ -386,6 +490,15 @@ public sealed class LlmPilotPolicy : IPilotPolicy
         if (options.MaximumTokens is < 32 or > 2000)
             throw new ArgumentOutOfRangeException(nameof(options));
         if (options.MaximumDecisionRepairAttempts is < 0 or > 2)
+            throw new ArgumentOutOfRangeException(nameof(options));
+        if (options.ReasoningEffort is not null and
+            not ("none" or "minimal" or "low" or "medium" or "high" or "xhigh" or "max"))
+        {
+            throw new ArgumentException(
+                "Reasoning effort must be none, minimal, low, medium, high, xhigh, or max.",
+                nameof(options));
+        }
+        if (options.MaximumConcurrentRequests is < 1 or > 32)
             throw new ArgumentOutOfRangeException(nameof(options));
     }
 

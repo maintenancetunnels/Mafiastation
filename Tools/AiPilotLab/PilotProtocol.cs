@@ -85,32 +85,41 @@ public sealed class PilotPipeClient : IPilotTransport
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(Timeout);
-        await using var pipe = new NamedPipeClientStream(
-            ".",
-            PipeName,
-            PipeDirection.InOut,
-            PipeOptions.Asynchronous);
-        await pipe.ConnectAsync((int)Timeout.TotalMilliseconds, timeout.Token);
-
-        await using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true)
+        try
         {
-            AutoFlush = true,
-        };
-        using var reader = new StreamReader(pipe, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, leaveOpen: true);
-        var requestJson = JsonSerializer.Serialize(request, JsonOptions);
-        await writer.WriteLineAsync(requestJson.AsMemory(), timeout.Token);
-        var responseJson = await ReadBoundedLineAsync(reader, MaximumResponseCharacters, timeout.Token);
-        if (string.IsNullOrWhiteSpace(responseJson))
-            throw new IOException("Pilot bridge closed without returning a response.");
+            await using var pipe = new NamedPipeClientStream(
+                ".",
+                PipeName,
+                PipeDirection.InOut,
+                PipeOptions.Asynchronous);
+            await pipe.ConnectAsync((int)Timeout.TotalMilliseconds, timeout.Token);
 
-        using var document = JsonDocument.Parse(responseJson);
-        var root = document.RootElement.Clone();
-        var response = JsonSerializer.Deserialize<PilotResponse>(responseJson, JsonOptions)
-            ?? throw new InvalidDataException("Pilot bridge returned an empty response object.");
-        if (response.Version != 1 || !string.Equals(response.Id, request.Id, StringComparison.Ordinal))
-            throw new InvalidDataException("Pilot bridge response version or request ID did not match.");
+            await using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true)
+            {
+                AutoFlush = true,
+            };
+            using var reader = new StreamReader(pipe, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, leaveOpen: true);
+            var requestJson = JsonSerializer.Serialize(request, JsonOptions);
+            await writer.WriteLineAsync(requestJson.AsMemory(), timeout.Token);
+            var responseJson = await ReadBoundedLineAsync(reader, MaximumResponseCharacters, timeout.Token);
+            if (string.IsNullOrWhiteSpace(responseJson))
+                throw new IOException("Pilot bridge closed without returning a response.");
 
-        return new PilotExchange(request, response, root);
+            using var document = JsonDocument.Parse(responseJson);
+            var root = document.RootElement.Clone();
+            var response = JsonSerializer.Deserialize<PilotResponse>(responseJson, JsonOptions)
+                ?? throw new InvalidDataException("Pilot bridge returned an empty response object.");
+            if (response.Version != 1 || !string.Equals(response.Id, request.Id, StringComparison.Ordinal))
+                throw new InvalidDataException("Pilot bridge response version or request ID did not match.");
+
+            return new PilotExchange(request, response, root);
+        }
+        catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                $"Pilot pipe '{PipeName}' request timed out after {Timeout.TotalMilliseconds:0} ms.",
+                exception);
+        }
     }
 
     private static async Task<string?> ReadBoundedLineAsync(

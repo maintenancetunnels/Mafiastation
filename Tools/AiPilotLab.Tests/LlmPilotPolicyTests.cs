@@ -107,6 +107,41 @@ public sealed class LlmPilotPolicyTests
     }
 
     [Test]
+    public async Task OpenAiResponsesUsesStatelessLowLatencyJsonMode()
+    {
+        using var handler = new RecordingHandler(OpenAiResponsesResponse(
+            """{"action":"observe","arguments":{}}"""));
+        using var client = new HttpClient(handler);
+        var policy = new LlmPilotPolicy(client, new LlmPilotPolicyOptions(
+            "openai-responses",
+            new Uri("http://127.0.0.1:11434/v1/responses"),
+            "gpt-5.6-luna",
+            null,
+            false,
+            ReasoningEffort: "none",
+            MaximumConcurrentRequests: 4));
+
+        var decision = await policy.DecideAsync("Do ordinary station work.", Observation());
+
+        using var request = JsonDocument.Parse(handler.RequestBodies.Single());
+        Assert.Multiple(() =>
+        {
+            Assert.That(request.RootElement.GetProperty("model").GetString(), Is.EqualTo("gpt-5.6-luna"));
+            Assert.That(request.RootElement.GetProperty("store").GetBoolean(), Is.False);
+            Assert.That(request.RootElement.GetProperty("instructions").GetString(), Does.Contain("ordinary non-antagonist"));
+            Assert.That(request.RootElement.GetProperty("input").GetString(), Does.Contain("Latest bounded observation"));
+            Assert.That(
+                request.RootElement.GetProperty("reasoning").GetProperty("effort").GetString(),
+                Is.EqualTo("none"));
+            Assert.That(
+                request.RootElement.GetProperty("text").GetProperty("format").GetProperty("type").GetString(),
+                Is.EqualTo("json_object"));
+            Assert.That(request.RootElement.TryGetProperty("messages", out _), Is.False);
+            Assert.That(decision.Request.Action, Is.EqualTo("observe"));
+        });
+    }
+
+    [Test]
     public async Task JsonObjectModeCanBeDisabledForLegacyEndpoint()
     {
         using var handler = new RecordingHandler(OpenAiResponse(
@@ -222,6 +257,22 @@ public sealed class LlmPilotPolicyTests
         choices = new[]
         {
             new { message = new { content } },
+        },
+    });
+
+    private static string OpenAiResponsesResponse(string content) => JsonSerializer.Serialize(new
+    {
+        status = "completed",
+        output = new[]
+        {
+            new
+            {
+                type = "message",
+                content = new[]
+                {
+                    new { type = "output_text", text = content },
+                },
+            },
         },
     });
 

@@ -1,0 +1,119 @@
+{
+  "version": 1,
+  "name": "realistic-station-smoke",
+  "timeoutSeconds": 180,
+  "bots": [
+    {
+      "name": "security-one",
+      "pipe": "mafiastation-crew-security-1",
+      "username": "CrewSecOne"
+    },
+    {
+      "name": "security-two",
+      "pipe": "mafiastation-crew-security-2",
+      "username": "CrewSecTwo"
+    },
+    {
+      "name": "doctor-one",
+      "pipe": "mafiastation-crew-doctor-1",
+      "username": "CrewDoctorOne"
+    },
+    {
+      "name": "doctor-two",
+      "pipe": "mafiastation-crew-doctor-2",
+      "username": "CrewDoctorTwo"
+    },
+    {
+      "name": "engineer-one",
+      "pipe": "mafiastation-crew-engineer-1",
+      "username": "CrewEngineerOne"
+    },
+    {
+      "name": "engineer-two",
+      "pipe": "mafiastation-crew-engineer-2",
+      "username": "CrewEngineerTwo"
+    },
+    {
+      "name": "cargo",
+      "pipe": "mafiastation-crew-cargo",
+      "username": "CrewCargo"
+    },
+    {
+      "name": "janitor",
+      "pipe": "mafiastation-crew-janitor",
+      "username": "CrewJanitor"
+    },
+    {
+      "name": "botanist",
+      "pipe": "mafiastation-crew-botanist",
+      "username": "CrewBotanist"
+    },
+    {
+      "name": "bartender",
+      "pipe": "mafiastation-crew-bartender",
+      "username": "CrewBartender"
+    },
+    {
+      "name": "passenger-one",
+      "pipe": "mafiastation-crew-passenger-1",
+      "username": "CrewPassengerOne"
+    },
+    {
+      "name": "passenger-two",
+      "pipe": "mafiastation-crew-passenger-2",
+      "username": "CrewPassengerTwo"
+    }
+  ],
+  "steps": [
+    {
+      "action": "status",
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "action": "join",
+      "until": true,
+      "pollMs": 500,
+      "timeoutSeconds": 90,
+      "expect": {
+        "ok": true,
+        "data.accepted": true
+      }
+    },
+    {
+      "action": "observe",
+      "until": true,
+      "pollMs": 500,
+      "timeoutSeconds": 60,
+      "expect": {
+        "ok": true,
+        "data.attached": true
+      }
+    },
+    {
+      "action": "goal",
+      "arguments": {
+        "kind": "move_relative",
+        "x": 1,
+        "y": 0,
+        "range": 0.6
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "action": "goal_status",
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "action": "stop",
+      "expect": {
+        "ok": true
+      }
+    }
+  ]
+}

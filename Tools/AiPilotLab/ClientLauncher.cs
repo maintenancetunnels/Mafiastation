@@ -11,7 +11,10 @@ public sealed record ClientLauncherOptions(
     string OutputDirectory,
     string? DotnetPath = null,
     TimeSpan? StartupTimeout = null,
-    IReadOnlyList<string>? ExtraCvars = null);
+    IReadOnlyList<string>? ExtraCvars = null,
+    int StartupBatchSize = 4,
+    int? GcHeapHardLimitMiB = null,
+    int GcConserveMemory = 0);
 
 public sealed class ClientLauncher
 {
@@ -29,6 +32,12 @@ public sealed class ClientLauncher
             throw new ArgumentException("Server address is required and must be at most 256 characters.", nameof(options));
         if (!IsLoopbackServerAddress(options.ServerAddress))
             throw new ArgumentException("AI pilot clients may connect only to a loopback server address.", nameof(options));
+        if (options.StartupBatchSize is < 1 or > 32)
+            throw new ArgumentOutOfRangeException(nameof(options), "Startup batch size must be from 1 through 32.");
+        if (options.GcHeapHardLimitMiB is < 256 or > 4096)
+            throw new ArgumentOutOfRangeException(nameof(options), "Client GC heap hard limit must be from 256 through 4096 MiB.");
+        if (options.GcConserveMemory is < 0 or > 9)
+            throw new ArgumentOutOfRangeException(nameof(options), "Client GC conserve-memory level must be from 0 through 9.");
         Directory.CreateDirectory(Path.GetFullPath(options.OutputDirectory));
 
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -45,18 +54,50 @@ public sealed class ClientLauncher
         }
 
         var launched = new List<LaunchedClient>();
+        var startupTimeout = options.StartupTimeout ?? TimeSpan.FromSeconds(60);
+        if (startupTimeout < TimeSpan.FromSeconds(1) || startupTimeout > TimeSpan.FromMinutes(10))
+            throw new ArgumentOutOfRangeException(nameof(options), "Startup timeout must be from 1 through 600 seconds.");
+        var startup = Stopwatch.StartNew();
         try
         {
-            foreach (var spec in specs)
+            for (var offset = 0; offset < specs.Count; offset += options.StartupBatchSize)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                _ = new PilotPipeClient(spec.Pipe, TimeSpan.FromSeconds(1));
-                launched.Add(StartOne(spec, options, clientPath));
+                var batch = specs
+                    .Skip(offset)
+                    .Take(options.StartupBatchSize)
+                    .Select(spec =>
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        _ = new PilotPipeClient(spec.Pipe, TimeSpan.FromSeconds(1));
+                        var client = StartOne(spec, options, clientPath);
+                        launched.Add(client);
+                        return client;
+                    })
+                    .ToArray();
+
+                var remaining = startupTimeout - startup.Elapsed;
+                if (remaining < TimeSpan.FromSeconds(1))
+                {
+                    throw new TimeoutException(
+                        $"Pilot bridge startup timed out before batch {offset / options.StartupBatchSize + 1}.");
+                }
+
+                await WaitForBridgesAsync(
+                    new LaunchedClientGroup(batch),
+                    remaining,
+                    cancellationToken);
+                Console.WriteLine(
+                    $"Client startup ready: {Math.Min(offset + batch.Length, specs.Count)}/{specs.Count}.");
+                var privateBytes = launched.Sum(client =>
+                {
+                    client.Process.Refresh();
+                    return client.Process.HasExited ? 0L : client.Process.PrivateMemorySize64;
+                });
+                Console.WriteLine(
+                    $"Client process private memory: {privateBytes / (1024d * 1024d * 1024d):0.00} GiB.");
             }
 
-            var group = new LaunchedClientGroup(launched);
-            await WaitForBridgesAsync(group, options.StartupTimeout ?? TimeSpan.FromSeconds(60), cancellationToken);
-            return group;
+            return new LaunchedClientGroup(launched);
         }
         catch
         {
@@ -82,6 +123,13 @@ public sealed class ClientLauncher
         };
         if (isDll)
             startInfo.ArgumentList.Add(clientPath);
+        if (options.GcHeapHardLimitMiB is { } heapLimitMiB)
+        {
+            var heapLimitBytes = heapLimitMiB * 1024L * 1024L;
+            startInfo.Environment["DOTNET_GCHeapHardLimit"] = $"0x{heapLimitBytes:X}";
+        }
+        if (options.GcConserveMemory > 0)
+            startInfo.Environment["DOTNET_GCConserveMemory"] = options.GcConserveMemory.ToString();
         startInfo.ArgumentList.Add("--headless");
         startInfo.ArgumentList.Add("--ai-pilot-local-trusted-bridge");
         startInfo.ArgumentList.Add("--connect");
@@ -97,6 +145,8 @@ public sealed class ClientLauncher
         }
         // Required bridge settings are last so an accidental duplicate --client-cvar cannot override them.
         // Robust's standalone headless path otherwise reaches an OpenGL-only RSI atlas preload.
+        AddCvar(startInfo, "display.vsync=false");
+        AddCvar(startInfo, "display.max_fps=30");
         AddCvar(startInfo, "res.texturepreloadingenabled=false");
         AddCvar(startInfo, "mafia.ai_pilot.client_enabled=true");
         AddCvar(startInfo, $"mafia.ai_pilot.pipe_name={spec.Pipe}");

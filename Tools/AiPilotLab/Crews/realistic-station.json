@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "name": "realistic-station",
+  "durationSeconds": 3600,
+  "decisionIntervalMs": 5000,
+  "joinTimeoutSeconds": 120,
+  "agents": [
+    {
+      "name": "security-one",
+      "pipe": "mafiastation-crew-security-1",
+      "username": "CrewSecOne",
+      "job": "SecurityOfficer",
+      "temperament": "cautious"
+    },
+    {
+      "name": "security-two",
+      "pipe": "mafiastation-crew-security-2",
+      "username": "CrewSecTwo",
+      "job": "SecurityOfficer",
+      "temperament": "blunt"
+    },
+    {
+      "name": "doctor-one",
+      "pipe": "mafiastation-crew-doctor-1",
+      "username": "CrewDoctorOne",
+      "job": "MedicalDoctor",
+      "temperament": "sociable"
+    },
+    {
+      "name": "doctor-two",
+      "pipe": "mafiastation-crew-doctor-2",
+      "username": "CrewDoctorTwo",
+      "job": "MedicalDoctor",
+      "temperament": "steady"
+    },
+    {
+      "name": "engineer-one",
+      "pipe": "mafiastation-crew-engineer-1",
+      "username": "CrewEngineerOne",
+      "job": "StationEngineer",
+      "temperament": "blunt"
+    },
+    {
+      "name": "engineer-two",
+      "pipe": "mafiastation-crew-engineer-2",
+      "username": "CrewEngineerTwo",
+      "job": "StationEngineer",
+      "temperament": "curious"
+    },
+    {
+      "name": "cargo",
+      "pipe": "mafiastation-crew-cargo",
+      "username": "CrewCargo",
+      "job": "CargoTechnician",
+      "temperament": "steady"
+    },
+    {
+      "name": "janitor",
+      "pipe": "mafiastation-crew-janitor",
+      "username": "CrewJanitor",
+      "job": "Janitor",
+      "temperament": "steady"
+    },
+    {
+      "name": "botanist",
+      "pipe": "mafiastation-crew-botanist",
+      "username": "CrewBotanist",
+      "job": "Botanist",
+      "temperament": "curious"
+    },
+    {
+      "name": "bartender",
+      "pipe": "mafiastation-crew-bartender",
+      "username": "CrewBartender",
+      "job": "Bartender",
+      "temperament": "sociable"
+    },
+    {
+      "name": "passenger-one",
+      "pipe": "mafiastation-crew-passenger-1",
+      "username": "CrewPassengerOne",
+      "job": "Passenger",
+      "temperament": "curious"
+    },
+    {
+      "name": "passenger-two",
+      "pipe": "mafiastation-crew-passenger-2",
+      "username": "CrewPassengerTwo",
+      "job": "Passenger",
+      "temperament": "sociable"
+    }
+  ]
+}

@@ -11,7 +11,10 @@ The normal Robust content sandbox remains enabled. Operating-system pipe and JSO
 small preloaded helper that is unavailable in full-release builds and remains inert unless the
 immutable process arguments specify headless mode, a strict loopback game address, the trusted
 bridge flag, and the exact enabled pipe CVars. The launcher supplies that proof and disables
-texture preloading for the supported headless path.
+texture preloading for the supported headless path. It also disables ineffective headless VSync
+and caps each client at 30 FPS so a twelve-client station does not spin one CPU core per client.
+The station launcher additionally gives each AI client a 1 GiB GC ceiling with .NET
+conserve-memory level 7; both are process-local and configurable launcher parameters.
 
 ## Build and verify
 
@@ -21,6 +24,47 @@ $dotnet = "$env:LOCALAPPDATA\Microsoft\dotnet\dotnet.exe"
 & $dotnet run --project .\Tools\AiPilotLab\AiPilotLab.csproj -- validate-scenario `
   --file .\Tools\AiPilotLab\Scenarios\basic-movement.json
 ```
+
+## Run the twelve-player OpenAI station
+
+`run_llm_station.ps1` starts a real `Mafiastation` preset round and then launches the
+`realistic-station.json` roster: two security officers, two doctors, two engineers, cargo,
+janitor, botanist, bartender, and two passengers. These are twelve real connected clients rather
+than server-owned hybrid NPCs.
+
+Set the key without placing it in PowerShell history, then start the one-hour shift:
+
+```powershell
+$env:OPENAI_API_KEY = [System.Net.NetworkCredential]::new(
+    '', (Read-Host 'OpenAI API key' -AsSecureString)).Password
+.\run_llm_station.ps1
+```
+
+The OpenAI default is `gpt-5.6-luna` through `/v1/responses`, with reasoning disabled for the
+latency-sensitive action loop, at most four simultaneous model requests, JSON-object output, and
+response storage disabled. Headless clients start in batches of four so their content initialization
+does not saturate the local machine, each client is capped at 30 FPS, and aggregate client private
+memory is reported after every batch. The station launcher stages a matching Release engine in
+`bin/Content.AiClient` and an isolated Pilot Lab runtime in `bin/AiPilotLab`; this leaves an
+already-running human client's DLLs untouched. Every run gets unique pipe names and a single
+station/AI artifact directory, and refuses to overlap another full-client pilot launch. The local
+`openai-compatible` Chat Completions provider remains available for Ollama and similar loopback
+endpoints.
+
+To verify all twelve client bridges without a model key or touching another station port:
+
+```powershell
+.\run_llm_station.ps1 -NoLlm -Port 1213
+```
+
+This uses the same crew runner as the OpenAI shift: it requests every roster job, verifies the
+server-reported assignment, waits for a controlled body and private observation, runs one
+deterministic stop decision, and requires all twelve summaries to succeed. For a separate movement
+exercise, launch `Scenarios/realistic-station-smoke.json`; its move-goal check verifies that the
+client accepts and reports a physical path request without treating an obstructed arrivals tile as
+an infrastructure failure. On the reference workstation the full keyless proof used 11.20 GiB of
+aggregate client private memory. Raise `-ClientGcHeapMiB` only if a longer shift needs more managed
+heap and the machine has adequate commit headroom.
 
 ## Run a deterministic local scenario
 
@@ -129,10 +173,13 @@ A local OpenAI-compatible endpoint can run without an API key:
   --duration-seconds 120
 ```
 
-For a remote HTTPS endpoint, put the key in `MAFIA_LLM_KEY` (or name a different environment
-variable with `--api-key-env`). Keys are never accepted on the command line or written to the
-action log. Anthropic's Messages API is also supported with `--provider anthropic` and its full
-endpoint URL.
+For OpenAI, use `--provider openai-responses`, the full
+`https://api.openai.com/v1/responses` endpoint, and `--reasoning-effort none` for the routine
+player-action loop. Put the key in `MAFIA_LLM_KEY` or `OPENAI_API_KEY` (or name a different
+environment variable with `--api-key-env`). Keys are never accepted on the command line or
+written to the action log. Use `--model-max-concurrency` to bound simultaneous requests across a
+shared crew policy. Anthropic's Messages API is also supported with `--provider anthropic` and
+its full endpoint URL.
 
 The model is invoked at most once per decision interval. After it starts a deterministic goal,
 the runner polls the ordinary executor without model calls until the goal completes, fails,

@@ -7,6 +7,43 @@ namespace Mafiastation.AiPilotLab.Tests;
 public sealed class LlmAgentRunnerTests
 {
     [Test]
+    public async Task TransientInitialObservationTimeoutsAreRetried()
+    {
+        var observeCalls = 0;
+        var policy = new CountingPolicy((_, _, _) =>
+            Task.FromResult(new PilotPolicyDecision(
+                "test",
+                "test",
+                """{"action":"stop","arguments":{}}""",
+                PilotRequest.Create("stop"))));
+        var transport = new ScriptedTransport(request => request.Action switch
+        {
+            "observe" when ++observeCalls < 3 =>
+                throw new TimeoutException("Simulated busy client."),
+            "observe" => Exchange(request, new
+            {
+                authorized = true,
+                goal = new { state = "none" },
+            }),
+            "stop" => Exchange(request, new { accepted = true }),
+            _ => throw new AssertionException($"Unexpected action {request.Action}."),
+        });
+
+        var summary = await new LlmAgentRunner(transport, policy).RunAsync(
+            "busy-client",
+            new LlmAgentOptions(
+                "Report for duty.",
+                TimeSpan.FromSeconds(2),
+                TimeSpan.FromSeconds(1)));
+
+        Assert.That(observeCalls, Is.EqualTo(3));
+        Assert.That(policy.Calls, Is.EqualTo(1));
+        Assert.That(summary.Success, Is.True);
+        Assert.That(summary.Errors, Is.Zero);
+        Assert.That(summary.CompletionReason, Is.EqualTo("model requested stop"));
+    }
+
+    [Test]
     public async Task PermanentAuthorizationDenialFailsBeforeModelCall()
     {
         var policy = new CountingPolicy((_, _, _) =>

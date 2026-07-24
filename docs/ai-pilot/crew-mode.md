@@ -12,7 +12,9 @@ speech available to their individual clients.
 ## Shift lifecycle
 
 1. `launch --crew` reads a strict versioned roster and starts one headless client per entry.
-2. Each client authenticates to the loopback server under its dedicated allowlisted username.
+2. Clients start in bounded batches, with the headless update loop capped at 30 FPS and process-local
+   GC memory controls, then authenticate to the loopback server under dedicated allowlisted
+   usernames.
 3. The harness requests a reviewed job prototype through the gated late-join path.
 4. The server checks the account, job allowlist, prototype, available station slot, and active round.
 5. The harness verifies the returned assigned job and waits for a controlled character to attach.
@@ -22,7 +24,10 @@ speech available to their individual clients.
    without further model calls until they finish, fail, or stall.
 
 Any setup failure is isolated in the crew summary, sends a best-effort `stop`, and prevents that
-agent's policy from starting. The launch group later terminates only client processes it created.
+agent's policy from starting. Transient join, attachment, and initial-observation pipe timeouts are
+retried within bounded deadlines. The launch group later terminates only client processes it
+created. A station launch refuses to overlap another trusted-pilot swarm and uses a unique pipe
+namespace, so two local runs cannot answer one another's requests.
 
 ## Knowledge boundary
 
@@ -84,3 +89,15 @@ exist only to prevent immediate repetition.
 Station Engineer, and Cargo Technician clients. The reviewed catalog also supports Passenger,
 Botanist, and Bartender. Server account and job allowlists must match the chosen roster, and the
 active station must have a free slot for every requested job.
+
+`Tools/AiPilotLab/Crews/realistic-station.json` is the full local-station target: twelve connected
+players covering two security officers, two doctors, two engineers, cargo, janitorial, botany,
+bar service, and two general assistants. `run_llm_station.ps1` derives its account and job
+allowlists from that roster, starts the actual `Mafiastation` preset, disables server-owned hybrid
+NPCs, and launches the crew through OpenAI's Responses API by default. `-NoLlm` runs the same
+twelve-client job-assignment and attachment path with a deterministic stop policy; the companion
+`realistic-station-smoke.json` separately exercises movement-goal acceptance without model access.
+The default launcher batches four clients, caps each client GC heap at 1 GiB, uses .NET
+conserve-memory level 7, and reports aggregate private memory after each batch. These controls are
+configurable through `-ClientStartupBatchSize`, `-ClientGcHeapMiB`, and
+`-ClientGcConserveMemory`.

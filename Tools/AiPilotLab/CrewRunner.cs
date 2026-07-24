@@ -162,15 +162,23 @@ public sealed class CrewRunner
 
         while (!deadline.IsCancellationRequested)
         {
-            var exchange = await SendRecordedAsync(
-                agent.Name,
-                transport,
-                PilotRequest.Create("observe"),
-                recorder,
-                deadline.Token);
-            if (exchange.Response.Ok && IsAttached(exchange.Response))
-                return;
-            lastError = exchange.Response.Error;
+            try
+            {
+                var exchange = await SendRecordedAsync(
+                    agent.Name,
+                    transport,
+                    PilotRequest.Create("observe"),
+                    recorder,
+                    deadline.Token);
+                if (exchange.Response.Ok && IsAttached(exchange.Response))
+                    return;
+                lastError = exchange.Response.Error;
+            }
+            catch (Exception exception) when (exception is IOException or TimeoutException)
+            {
+                lastError = exception.Message;
+            }
+
             await Task.Delay(PreparationPollInterval, deadline.Token);
         }
 

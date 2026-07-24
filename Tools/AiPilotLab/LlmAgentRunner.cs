@@ -24,6 +24,8 @@ public sealed class LlmAgentRunner
 {
     private static readonly TimeSpan AuthorizationReadyTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan AuthorizationPollInterval = TimeSpan.FromMilliseconds(250);
+    private static readonly TimeSpan InitializationRetryInterval = TimeSpan.FromMilliseconds(250);
+    private const int InitializationTransportAttempts = 3;
     private const string AuthorizationPendingReason = "Authorization has not been checked.";
 
     private readonly IPilotTransport _transport;
@@ -59,9 +61,8 @@ public sealed class LlmAgentRunner
         PilotResponse observation;
         try
         {
-            var initial = await SendAsync(
+            var initial = await SendInitialObservationAsync(
                 bot,
-                PilotRequest.Create("observe"),
                 recorder,
                 deadline.Token);
             if (!initial.Response.Ok)
@@ -203,6 +204,36 @@ public sealed class LlmAgentRunner
             success,
             routinePolls,
             escalations);
+    }
+
+    private async Task<PilotExchange> SendInitialObservationAsync(
+        string bot,
+        PilotRecorder? recorder,
+        CancellationToken cancellationToken)
+    {
+        Exception? lastException = null;
+        for (var attempt = 1; attempt <= InitializationTransportAttempts; attempt++)
+        {
+            try
+            {
+                return await SendAsync(
+                    bot,
+                    PilotRequest.Create("observe"),
+                    recorder,
+                    cancellationToken);
+            }
+            catch (Exception exception) when (exception is IOException or TimeoutException)
+            {
+                lastException = exception;
+                if (attempt == InitializationTransportAttempts)
+                    break;
+
+                await Task.Delay(InitializationRetryInterval, cancellationToken);
+            }
+        }
+
+        throw lastException ??
+              new TimeoutException("Initial pilot observation did not complete.");
     }
 
     private async Task<PilotExchange> SendAsync(

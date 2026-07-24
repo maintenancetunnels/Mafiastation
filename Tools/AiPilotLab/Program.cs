@@ -59,16 +59,20 @@ internal static class Program
               send --pipe NAME --action ACTION [--args JSON]
               scenario --file PATH [--output DIR]
               validate-scenario --file PATH
-              crew --file ROSTER --provider openai-compatible|anthropic
+              crew --file ROSTER --provider openai-responses|openai-compatible|anthropic
                    --endpoint URI --model MODEL [--allow-speech] [--output DIR]
+                   [--reasoning-effort LEVEL] [--model-max-concurrency N]
               validate-crew --file ROSTER
               replay --file JSONL [--pipe NAME] [--map BOT=PIPE] [--time-scale N]
                      [--allow-speech] [--allow-lifecycle]
-              agent --pipe NAME --goal TEXT --provider openai-compatible|anthropic
+              agent --pipe NAME --goal TEXT --provider openai-responses|openai-compatible|anthropic
                     --endpoint URI --model MODEL [--api-key-env NAME] [--allow-speech]
               launch --client PATH --server ADDRESS
                      [--count N] [--scenario PATH | --goal TEXT | --crew ROSTER]
+                     [--crew-smoke]
                      [agent model options] [--startup-timeout-seconds N]
+                     [--client-startup-batch-size N]
+                     [--client-gc-heap-mib N] [--client-gc-conserve-memory N]
                      [--pipe-prefix NAME] [--username-prefix NAME]
                      [--username-start-index N]
               moderation --action list|show|label|summary|export --incidents PATH [options]
@@ -128,9 +132,11 @@ internal static class Program
         var roster = await CrewRosterLoader.LoadAsync(arguments.Require("file"), cancellationToken);
         var output = ResolveOutputDirectory(arguments.Get("output"), $"crew-{roster.Name}");
         Directory.CreateDirectory(output);
+        if (arguments.GetFlag("crew-smoke"))
+            return await RunCrewAsync(roster, output, _ => new CrewSmokePolicy(), cancellationToken);
         using var httpClient = NewModelHttpClient(arguments);
         var policy = CreatePolicy(arguments, httpClient);
-        return await RunCrewAsync(roster, output, policy, cancellationToken);
+        return await RunCrewAsync(roster, output, _ => policy, cancellationToken);
     }
 
     private static async Task<int> ReplayAsync(CommandLineArguments arguments, CancellationToken cancellationToken)
@@ -206,7 +212,8 @@ internal static class Program
         if (selectedModes > 1)
             throw new ArgumentException("Launch accepts only one of --scenario, --goal, or --crew.");
 
-        var pipePrefix = arguments.Get("pipe-prefix") ?? "mafiastation-pilot";
+        var requestedPipePrefix = arguments.Get("pipe-prefix");
+        var pipePrefix = requestedPipePrefix ?? "mafiastation-pilot";
         var usernamePrefix = arguments.Get("username-prefix") ?? "Pilot";
         var usernameStartIndex = arguments.GetInt("username-start-index", 1, 1, 10_000);
         if (arguments.Has("username-start-index") && (crew != null || scenario != null))
@@ -217,7 +224,10 @@ internal static class Program
 
         var specs = crew != null
             ? crew.Agents.Select(agent =>
-                new ClientLaunchSpec(agent.Name, agent.Pipe, agent.Username)).ToArray()
+                new ClientLaunchSpec(
+                    agent.Name,
+                    requestedPipePrefix == null ? agent.Pipe : $"{requestedPipePrefix}-{agent.Name}",
+                    agent.Username)).ToArray()
             : scenario != null
                 ? scenario.Bots.Select((bot, index) =>
                     new ClientLaunchSpec(
@@ -248,11 +258,18 @@ internal static class Program
             Path.Combine(output, "clients"),
             arguments.Get("dotnet"),
             TimeSpan.FromSeconds(arguments.GetInt(startupTimeoutOption, 60, 1, 600)),
-            arguments.GetMany("client-cvar"));
+            arguments.GetMany("client-cvar"),
+            arguments.GetInt("client-startup-batch-size", 4, 1, 32),
+            arguments.Has("client-gc-heap-mib")
+                ? arguments.GetInt("client-gc-heap-mib", 1024, 256, 4096)
+                : null,
+            arguments.GetInt("client-gc-conserve-memory", 0, 0, 9));
         await using var clients = await launcher.LaunchAsync(specs, launcherOptions, cancellationToken);
 
         if (scenario != null)
         {
+            if (arguments.GetFlag("crew-smoke"))
+                throw new ArgumentException("--crew-smoke requires --crew.");
             await using var recorder = new PilotRecorder(Path.Combine(output, "actions.jsonl"));
             var summary = await new ScenarioRunner().RunAsync(scenario, recorder, cancellationToken);
             await ScenarioRunner.SaveSummaryAsync(summary, Path.Combine(output, "summary.json"), cancellationToken);
@@ -263,10 +280,37 @@ internal static class Program
 
         if (crew != null)
         {
+            var crewPipes = specs.ToDictionary(
+                spec => spec.Name,
+                spec => spec.Pipe,
+                StringComparer.OrdinalIgnoreCase);
+            IPilotTransport TransportFactory(CrewAgent agent)
+            {
+                return new PilotPipeClient(crewPipes[agent.Name], TimeSpan.FromSeconds(10));
+            }
+
+            if (arguments.GetFlag("crew-smoke"))
+            {
+                return await RunCrewAsync(
+                    crew,
+                    output,
+                    _ => new CrewSmokePolicy(),
+                    cancellationToken,
+                    TransportFactory);
+            }
+
             using var httpClient = NewModelHttpClient(arguments);
             var policy = CreatePolicy(arguments, httpClient);
-            return await RunCrewAsync(crew, output, policy, cancellationToken);
+            return await RunCrewAsync(
+                crew,
+                output,
+                _ => policy,
+                cancellationToken,
+                TransportFactory);
         }
+
+        if (arguments.GetFlag("crew-smoke"))
+            throw new ArgumentException("--crew-smoke requires --crew.");
 
         if (!string.IsNullOrWhiteSpace(goal))
         {
@@ -302,13 +346,14 @@ internal static class Program
     private static async Task<int> RunCrewAsync(
         CrewRoster roster,
         string output,
-        IPilotPolicy policy,
-        CancellationToken cancellationToken)
+        Func<CrewAgent, IPilotPolicy> policyFactory,
+        CancellationToken cancellationToken,
+        Func<CrewAgent, IPilotTransport>? transportFactory = null)
     {
         await using var recorder = new PilotRecorder(Path.Combine(output, "crew.jsonl"));
         var runner = new CrewRunner(
-            agent => new PilotPipeClient(agent.Pipe, TimeSpan.FromSeconds(10)),
-            _ => policy);
+            transportFactory ?? (agent => new PilotPipeClient(agent.Pipe, TimeSpan.FromSeconds(10))),
+            policyFactory);
         var summary = await runner.RunAsync(roster, recorder, cancellationToken);
         await File.WriteAllTextAsync(
             Path.Combine(output, "crew-summary.json"),
@@ -317,6 +362,23 @@ internal static class Program
         Console.WriteLine(JsonSerializer.Serialize(summary, OutputJson));
         Console.WriteLine($"Artifacts: {output}");
         return summary.Success ? 0 : 1;
+    }
+
+    private sealed class CrewSmokePolicy : IPilotPolicy
+    {
+        public Task<PilotPolicyDecision> DecideAsync(
+            string goal,
+            PilotResponse observation,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(
+                new PilotPolicyDecision(
+                    "deterministic-smoke",
+                    "none",
+                    """{"action":"stop","arguments":{}}""",
+                    PilotRequest.Create("stop")));
+        }
     }
 
     private static async Task<int> ModerationAsync(
@@ -427,6 +489,9 @@ internal static class Program
         if (string.IsNullOrWhiteSpace(keyEnvironment) || keyEnvironment.Length > 128)
             throw new ArgumentException("--api-key-env must name an environment variable.");
         var key = Environment.GetEnvironmentVariable(keyEnvironment);
+        var reasoningEffort = arguments.Get("reasoning-effort");
+        if (provider == "openai-responses" && string.IsNullOrWhiteSpace(reasoningEffort))
+            reasoningEffort = "none";
         return new LlmPilotPolicy(httpClient, new LlmPilotPolicyOptions(
             provider,
             endpoint,
@@ -437,7 +502,9 @@ internal static class Program
             arguments.GetDouble("temperature", 0.1, 0, 1),
             arguments.GetInt("max-tokens", 300, 32, 2000),
             !arguments.GetFlag("disable-json-object-mode"),
-            arguments.GetInt("model-repair-attempts", 1, 0, 2)));
+            arguments.GetInt("model-repair-attempts", 1, 0, 2),
+            reasoningEffort,
+            arguments.GetInt("model-max-concurrency", 4, 1, 32)));
     }
 
     private static JsonElement? ParseArguments(string? json)
