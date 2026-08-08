@@ -44,6 +44,42 @@ public sealed class CrewRunnerTests
     }
 
     [Test]
+    public async Task RetriesAcceptedJoinUntilCharacterActuallyAttaches()
+    {
+        var joinCalls = 0;
+        var observeCalls = 0;
+        var transport = new FakeTransport(request => request.Action switch
+        {
+            "join" => Join(request, ++joinCalls > 0 ? "Janitor" : null),
+            "observe" => Exchange(request, new
+            {
+                attached = ++observeCalls >= 3,
+                authorized = true,
+                goal = new { state = "none" },
+            }),
+            "stop" => Exchange(request, new { accepted = true }),
+            _ => throw new AssertionException($"Unexpected action {request.Action}."),
+        });
+        var policy = new FakePolicy((_, _, _) =>
+            Task.FromResult(new PilotPolicyDecision(
+                "test",
+                "test",
+                """{"action":"stop","arguments":{}}""",
+                PilotRequest.Create("stop"))));
+        var runner = new CrewRunner(_ => transport, _ => policy);
+
+        var summary = await runner.RunAsync(Roster());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(joinCalls, Is.EqualTo(3));
+            Assert.That(observeCalls, Is.GreaterThanOrEqualTo(4));
+            Assert.That(summary.Success, Is.True);
+            Assert.That(summary.Agents[0].Joined, Is.True);
+        });
+    }
+
+    [Test]
     public async Task JoinsRequestedJobBeforeStartingRolePolicy()
     {
         string? requestedJob = null;

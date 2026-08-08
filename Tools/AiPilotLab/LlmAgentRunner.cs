@@ -7,7 +7,10 @@ public sealed record LlmAgentOptions(
     string Goal,
     TimeSpan Duration,
     TimeSpan DecisionInterval,
-    int MaximumConsecutiveErrors = 3);
+    // 3 was too tight for a live session: a pilot that names an entity outside its bounded
+    // observation trips the validator, and three of those in a row retired two of five crew in
+    // the first minutes. Still bounded, so a genuinely stuck pilot stops instead of spinning.
+    int MaximumConsecutiveErrors = 8);
 
 public sealed record LlmAgentSummary(
     string Bot,
@@ -18,7 +21,8 @@ public sealed record LlmAgentSummary(
     double DurationMilliseconds,
     bool Success,
     int RoutinePolls = 0,
-    int Escalations = 0);
+    int Escalations = 0,
+    int RejectedActions = 0);
 
 public sealed class LlmAgentRunner
 {
@@ -56,7 +60,10 @@ public sealed class LlmAgentRunner
         var errors = 0;
         var routinePolls = 0;
         var escalations = 0;
+        var rejectedActions = 0;
         var consecutiveErrors = 0;
+        var consecutiveEndpointFailures = 0;
+        var endpointBackoff = TimeSpan.Zero;
         var completionReason = "duration";
         PilotResponse observation;
         try
@@ -97,7 +104,24 @@ public sealed class LlmAgentRunner
                     if (!status.Response.Ok)
                         throw new InvalidDataException(status.Response.Error ?? "Pilot goal status failed.");
 
-                    if (IsActiveGoal(PilotJson.GoalState(status.Response)))
+                    // Someone spoke to us, or something happened to us (damage, an incident).
+                    // Interrupt the running goal so the next iteration consults the model with the
+                    // fresh perception. Without this the pilot walks out its goal like a scripted
+                    // robot: it cannot answer a player who talks to it, and it will not react to
+                    // being attacked, because the model is simply never asked while a goal runs.
+                    if (HasUnreadPerception(status.Response))
+                    {
+                        await SendAsync(bot, PilotRequest.Create("stop"), recorder, deadline.Token);
+                        actions++;
+                        var interrupted = await SendAsync(
+                            bot,
+                            PilotRequest.Create("observe"),
+                            recorder,
+                            deadline.Token);
+                        actions++;
+                        observation = interrupted.Response.Ok ? interrupted.Response : status.Response;
+                    }
+                    else if (IsActiveGoal(PilotJson.GoalState(status.Response)))
                     {
                         observation = status.Response;
                     }
@@ -115,32 +139,84 @@ public sealed class LlmAgentRunner
                 }
                 else
                 {
+                    if (!HasUnreadPerception(observation))
+                    {
+                        var refreshed = await SendAsync(
+                            bot,
+                            PilotRequest.Create("observe"),
+                            recorder,
+                            deadline.Token);
+                        actions++;
+                        if (!refreshed.Response.Ok)
+                        {
+                            throw new InvalidDataException(
+                                refreshed.Response.Error ?? "Pilot pre-decision observation failed.");
+                        }
+                        observation = refreshed.Response;
+                    }
+
                     escalations++;
                     var decision = await _policy.DecideAsync(options.Goal, observation, deadline.Token);
+                    consecutiveEndpointFailures = 0;
+                    endpointBackoff = TimeSpan.Zero;
                     decisions++;
                     if (recorder != null)
                         await recorder.RecordModelAsync(bot, decision, CancellationToken.None);
                     var exchange = await SendAsync(bot, decision.Request, recorder, deadline.Token);
                     actions++;
                     if (!exchange.Response.Ok)
-                        throw new InvalidDataException(exchange.Response.Error ?? "Pilot action failed.");
-                    consecutiveErrors = 0;
-
-                    if (decision.Request.Action == "stop")
                     {
-                        completionReason = "model requested stop";
-                        break;
-                    }
+                        rejectedActions++;
+                        if (recorder != null)
+                        {
+                            await recorder.RecordErrorAsync(bot, new
+                            {
+                                stage = "action-rejected",
+                                error = "PilotActionRejected",
+                                message = exchange.Response.Error ?? "Pilot action was rejected.",
+                                transient = true,
+                            }, CancellationToken.None);
+                        }
 
-                    if (decision.Request.Action == "observe")
-                    {
-                        observation = exchange.Response;
+                        var refreshed = await SendAsync(
+                            bot,
+                            PilotRequest.Create("observe"),
+                            recorder,
+                            deadline.Token);
+                        actions++;
+                        if (!refreshed.Response.Ok)
+                        {
+                            throw new InvalidDataException(
+                                refreshed.Response.Error ?? "Pilot observation after rejected action failed.");
+                        }
+                        observation = refreshed.Response;
+                        consecutiveErrors = 0;
                     }
                     else
                     {
-                        var observed = await SendAsync(bot, PilotRequest.Create("observe"), recorder, deadline.Token);
-                        actions++;
-                        observation = observed.Response;
+                        consecutiveErrors = 0;
+
+                        if (decision.Request.Action == "stop")
+                        {
+                            completionReason = "model requested stop";
+                            break;
+                        }
+
+                        if (decision.Request.Action == "observe")
+                        {
+                            observation = exchange.Response;
+                        }
+                        else
+                        {
+                            var observed = await SendAsync(bot, PilotRequest.Create("observe"), recorder, deadline.Token);
+                            actions++;
+                            if (!observed.Response.Ok)
+                            {
+                                throw new InvalidDataException(
+                                    observed.Response.Error ?? "Pilot observation after action failed.");
+                            }
+                            observation = observed.Response;
+                        }
                     }
                 }
             }
@@ -148,10 +224,26 @@ public sealed class LlmAgentRunner
             {
                 break;
             }
-            catch (Exception exception) when (exception is IOException or InvalidDataException or HttpRequestException or TimeoutException)
+            catch (Exception exception) when (exception is IOException or InvalidDataException or
+                                               InvalidOperationException or JsonException or
+                                               HttpRequestException or TimeoutException)
             {
                 errors++;
-                consecutiveErrors++;
+                var transientEndpointFailure = IsTransientEndpointFailure(exception);
+                if (transientEndpointFailure)
+                {
+                    // Provider throttling and temporarily incomplete Responses payloads do not
+                    // mean the connected player is broken. Back off without retiring its loop.
+                    consecutiveEndpointFailures++;
+                    endpointBackoff = GetEndpointBackoff(bot, consecutiveEndpointFailures);
+                    consecutiveErrors = 0;
+                }
+                else
+                {
+                    consecutiveEndpointFailures = 0;
+                    endpointBackoff = TimeSpan.Zero;
+                    consecutiveErrors++;
+                }
                 if (recorder != null)
                 {
                     await recorder.RecordErrorAsync(bot, new
@@ -160,9 +252,14 @@ public sealed class LlmAgentRunner
                         error = exception.GetType().Name,
                         message = exception.Message,
                         consecutiveErrors,
+                        transientEndpointFailure,
+                        retryAfterMilliseconds = transientEndpointFailure
+                            ? endpointBackoff.TotalMilliseconds
+                            : 0d,
                     }, CancellationToken.None);
                 }
-                if (consecutiveErrors >= options.MaximumConsecutiveErrors)
+                if (!transientEndpointFailure &&
+                    consecutiveErrors >= options.MaximumConsecutiveErrors)
                 {
                     completionReason = $"{consecutiveErrors} consecutive errors";
                     break;
@@ -170,7 +267,10 @@ public sealed class LlmAgentRunner
             }
 
             iteration.Stop();
-            var remaining = options.DecisionInterval - iteration.Elapsed;
+            var targetDelay = endpointBackoff > options.DecisionInterval
+                ? endpointBackoff
+                : options.DecisionInterval;
+            var remaining = targetDelay - iteration.Elapsed;
             if (remaining > TimeSpan.Zero)
             {
                 try
@@ -203,7 +303,38 @@ public sealed class LlmAgentRunner
             stopwatch.Elapsed.TotalMilliseconds,
             success,
             routinePolls,
-            escalations);
+            escalations,
+            rejectedActions);
+    }
+
+    private static bool IsTransientEndpointFailure(Exception exception)
+    {
+        if (exception is TimeoutException)
+            return true;
+
+        if (exception is HttpRequestException)
+        {
+            var message = exception.Message;
+            return !message.Contains("HTTP ", StringComparison.Ordinal) ||
+                   message.Contains("HTTP 408", StringComparison.Ordinal) ||
+                   message.Contains("HTTP 425", StringComparison.Ordinal) ||
+                   message.Contains("HTTP 429", StringComparison.Ordinal) ||
+                   message.Contains("HTTP 5", StringComparison.Ordinal);
+        }
+
+        return exception is InvalidDataException &&
+               exception.Message.Contains(
+                   "OpenAI Responses result did not contain output text",
+                   StringComparison.Ordinal);
+    }
+
+    private static TimeSpan GetEndpointBackoff(string bot, int consecutiveFailures)
+    {
+        var exponent = Math.Clamp(consecutiveFailures, 1, 4);
+        var seconds = Math.Min(30d, Math.Pow(2d, exponent));
+        var hash = StringComparer.Ordinal.GetHashCode(bot) & int.MaxValue;
+        var jitter = TimeSpan.FromMilliseconds(hash % 1000);
+        return TimeSpan.FromSeconds(seconds) + jitter;
     }
 
     private async Task<PilotExchange> SendInitialObservationAsync(
@@ -328,5 +459,33 @@ public sealed class LlmAgentRunner
     private static bool IsActiveGoal(string? state)
     {
         return state is "planning" or "moving";
+    }
+
+    private static bool HasUnreadPerception(PilotResponse observation)
+    {
+        return HasUnreadItems(observation, "recentSpeech") ||
+               HasUnreadItems(observation, "recentIncidents");
+    }
+
+    private static bool HasUnreadItems(PilotResponse observation, string property)
+    {
+        if (observation.Data.ValueKind != JsonValueKind.Object ||
+            !observation.Data.TryGetProperty(property, out var items) ||
+            items.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        foreach (var item in items.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object ||
+                !item.TryGetProperty("unread", out var unread) ||
+                unread.ValueKind == JsonValueKind.True)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

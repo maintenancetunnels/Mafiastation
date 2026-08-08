@@ -16,12 +16,6 @@ public sealed partial class PrisonerTrackingComponent : Component
     public string PlayerUserId = string.Empty;
 
     /// <summary>
-    /// Whether this prisoner has broken out of the permabrig.
-    /// </summary>
-    [DataField, AutoNetworkedField]
-    public bool HasEscaped;
-
-    /// <summary>
     /// Whether this prisoner is a fugitive (spawned outside perma).
     /// </summary>
     [DataField, AutoNetworkedField]

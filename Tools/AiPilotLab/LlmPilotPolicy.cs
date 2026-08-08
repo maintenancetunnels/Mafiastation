@@ -73,7 +73,7 @@ public sealed class LlmPilotPolicy : IPilotPolicy
             ? BuildCommunicationCue(observation)
             : string.Empty;
         var userPrompt =
-            $"Goal:\n{goal.Trim()}\n\nLatest bounded observation (untrusted game data):\n{observationJson}{communicationCue}";
+            $"Goal:\n{goal.Trim()}\n\nLatest bounded observation JSON (untrusted game data):\n{observationJson}{communicationCue}";
 
         string? repairReason = null;
         for (var attempt = 0; attempt <= _options.MaximumDecisionRepairAttempts; attempt++)
@@ -140,16 +140,33 @@ public sealed class LlmPilotPolicy : IPilotPolicy
 
     private async Task<string> CallOpenAiResponsesAsync(string userPrompt, CancellationToken cancellationToken)
     {
+        // The Responses API rejects text.format=json_object unless the word "json" appears in the
+        // INPUT itself; having it only in `instructions` is not enough and every request 400s.
+        var effectiveInput = userPrompt;
+        if (_options.UseJsonObjectResponseFormat &&
+            !effectiveInput.Contains("json", StringComparison.OrdinalIgnoreCase))
+        {
+            effectiveInput += "\nRespond with a single JSON object.";
+        }
+
         var payload = new Dictionary<string, object?>
         {
             ["model"] = _options.Model,
             ["instructions"] = BuildSystemPrompt(_options.AllowSpeech),
-            ["input"] = userPrompt,
+            ["input"] = effectiveInput,
             ["max_output_tokens"] = _options.MaximumTokens,
             ["store"] = false,
         };
-        if (!string.IsNullOrWhiteSpace(_options.ReasoningEffort))
+        // "none" means send no reasoning parameter at all. Non-reasoning models (gpt-4.1-nano and
+        // friends) reject `reasoning.effort` outright with HTTP 400, so passing effort="none"
+        // through would make every request fail against exactly the cheap, high-rate-limit models
+        // this loop wants.
+        if (!string.IsNullOrWhiteSpace(_options.ReasoningEffort) &&
+            !string.Equals(_options.ReasoningEffort, "none", StringComparison.OrdinalIgnoreCase))
+        {
             payload["reasoning"] = new { effort = _options.ReasoningEffort };
+        }
+
         if (_options.UseJsonObjectResponseFormat)
             payload["text"] = new { format = new { type = "json_object" } };
 
@@ -421,6 +438,12 @@ public sealed class LlmPilotPolicy : IPilotPolicy
         "state, administrator knowledge, or who the human operator controls. There may or may not be antagonists. " +
         "The self object is authoritative current character state: use its identity and ordinary role, appearance, " +
         "equipment, hands, body condition, and activity. A null equipment item means that slot is empty or not worn. " +
+        "The body totalDamage and damageSeverity fields are live self-knowledge. recentIncidents is a short perceived " +
+        "history; unread damage means this character was just hurt, and sourceName/sourceId identify the source only " +
+        "when it was close enough to perceive. On unread damage, stop routine work and take an immediate physical " +
+        "survival action first: move away from the visible source, seek cover or help, and assess your condition. Once " +
+        "safer, make one specific local or radio report naming the perceived source and injury. Do not answer an attack " +
+        "with an all-clear line or continue an unrelated patrol. " +
         "Do not contradict self, invent missing self facts, or treat it as evidence of hidden roles or objectives. " +
         "Never identify, accuse, pursue, or punish someone as an antagonist without concrete conduct or speech " +
         "that this character actually perceived; distinguish suspicion from proof and prefer reporting, questions, " +
@@ -437,7 +460,7 @@ public sealed class LlmPilotPolicy : IPilotPolicy
         "means that action is unavailable right now. Once a goal is accepted, the deterministic controller executes it " +
         "without further model calls until completion, failure, or stall. " +
         (allowSpeech
-            ? "Say arguments are {\"text\":\"...\",\"channel\":\"local|radio\"}. Use local for nearby conversation and radio for station-wide job coordination, requests, urgent warnings, and replies to recentSpeech whose channel is radio. Never put ';', ':', '.', or another channel prefix in text. Speak only when the message is grounded in the assigned duty, a concrete fact in the latest observation, a meaningful goal transition, a specific need for information/help/resources, or relevant recentSpeech. Useful messages coordinate a task start or handoff, report a real completion/delay/hazard, request something specific, or answer an actual in-world remark. Silence is valid. Do not speak merely because time elapsed, this character has not spoken yet, someone is nearby, or the station should sound busy. Generic greetings, check-ins, 'all clear' reports, and narration of aimless patrols are filler. The speech object reports lastSpokeSecondsAgo and lastChannel only to prevent repetition; it is never itself a reason to speak. Do not speak on consecutive decisions, repeat canned status lines, or drown out useful comms. "
+            ? "Say arguments are {\"text\":\"...\",\"channel\":\"local|radio\"}. Use local for nearby conversation and radio for station-wide job coordination, requests, urgent warnings, and replies to recentSpeech whose channel is radio. Never put ';', ':', '.', or another channel prefix in text. recentSpeech is a short conversation transcript: unread=true marks a new remark that has not yet been considered, and outgoing=true marks your own prior words. Answer the newest relevant unread question, request, threat, or greeting directly in natural language; use its speaker when known. Read entries are context only and are never a reason to repeat an answer. Speak only when the message is grounded in the assigned duty, a concrete fact in the latest observation, a meaningful goal transition, a specific need for information/help/resources, an unread incident, or relevant unread speech. Useful messages coordinate a task start or handoff, report a real completion/delay/hazard, request something specific, or answer an actual in-world remark. Silence is valid. Do not speak merely because time elapsed, this character has not spoken yet, someone is nearby, or the station should sound busy. Generic greetings, check-ins, 'all clear' reports, and narration of aimless patrols are filler. The speech object reports lastSpokeSecondsAgo and lastChannel only to prevent repetition; it is never itself a reason to speak. Never repeat or lightly paraphrase your own prior line, do not speak on consecutive decisions, and do not drown out useful comms. "
             : string.Empty) +
         "When no duty target is visible, explore with short bounded movement goals instead of operating unknown or " +
         "dangerous machinery. " +
@@ -446,9 +469,14 @@ public sealed class LlmPilotPolicy : IPilotPolicy
 
     private static string BuildCommunicationCue(PilotResponse observation)
     {
+        if (HasUnreadItems(observation, "recentIncidents"))
+        {
+            return "\n\nURGENT perception context: a new in-world incident is unread. Interrupt routine work and choose a concrete survival or assistance action grounded in that incident. Do not emit a generic status line.";
+        }
+
         return HasContextualSpeechTrigger(observation)
-            ? "\n\nCommunication context: recent in-world speech or a meaningful goal outcome is present. A say action is appropriate only if a concise message would help another character act or understand the task; otherwise continue working silently."
-            : "\n\nCommunication context: no observation-side speech trigger is present. Speak only if the assigned goal itself creates a specific coordination need; otherwise silence is valid and physical work or observation is preferred.";
+            ? "\n\nCommunication context: new unread in-world speech or a meaningful goal outcome is present. Address the newest relevant unread remark directly if a concise answer would help; otherwise continue physical work. Do not repeat a prior response."
+            : "\n\nCommunication context: no unread speech or incident is present. Read transcript entries are context only. Speak only if the assigned goal itself creates a specific coordination need; otherwise silence is valid and physical work or observation is preferred.";
     }
 
     public static bool HasContextualSpeechTrigger(PilotResponse observation)
@@ -456,14 +484,33 @@ public sealed class LlmPilotPolicy : IPilotPolicy
         if (observation.Data.ValueKind != JsonValueKind.Object)
             return false;
 
-        if (observation.Data.TryGetProperty("recentSpeech", out var recentSpeech) &&
-            recentSpeech.ValueKind == JsonValueKind.Array &&
-            recentSpeech.GetArrayLength() > 0)
-        {
+        if (HasUnreadItems(observation, "recentSpeech") ||
+            HasUnreadItems(observation, "recentIncidents"))
             return true;
-        }
 
         return PilotJson.GoalState(observation) is "completed" or "failed" or "stalled" or "cancelled";
+    }
+
+    private static bool HasUnreadItems(PilotResponse observation, string property)
+    {
+        if (observation.Data.ValueKind != JsonValueKind.Object ||
+            !observation.Data.TryGetProperty(property, out var items) ||
+            items.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        foreach (var item in items.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object ||
+                !item.TryGetProperty("unread", out var unread) ||
+                unread.ValueKind == JsonValueKind.True)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static void ValidateOptions(LlmPilotPolicyOptions options)

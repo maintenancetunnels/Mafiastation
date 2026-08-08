@@ -67,6 +67,14 @@ public sealed class PenaltyRecord
     public bool AdminIssued { get; set; }
 
     /// <summary>
+    /// Security-issued sentences start pending and only count toward force-spawn balance after
+    /// the target ends the round in design custody (permabrig or prisoner shuttle section).
+    /// Admin and system penalties are never pending. Absent in older files → false (counts).
+    /// </summary>
+    [JsonPropertyName("pendingCustody")]
+    public bool PendingCustody { get; set; }
+
+    /// <summary>
     /// How many rounds remain to serve.
     /// </summary>
     [JsonIgnore]
@@ -77,4 +85,11 @@ public sealed class PenaltyRecord
     /// </summary>
     [JsonIgnore]
     public bool IsServed => RoundsServed >= RoundsAssigned;
+
+    /// <summary>
+    /// Whether this record currently contributes to outstanding force-spawn balance.
+    /// </summary>
+    [JsonIgnore]
+    public bool CountsTowardBalance =>
+        PrisonerDesignRules.CountsTowardForceSpawnBalance(PendingCustody, IsServed);
 }

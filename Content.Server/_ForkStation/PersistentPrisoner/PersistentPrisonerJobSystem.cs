@@ -14,7 +14,6 @@ public sealed class PersistentPrisonerJobSystem : EntitySystem
     [Dependency] private readonly PersistentPrisonerSystem _penalties = default!;
     [Dependency] private readonly IPrototypeManager _protoManager = default!;
 
-    private static readonly ISawmill Log = Logger.GetSawmill("persistent.prisoner.jobs");
 
     private const string PrisonerJobId = "Prisoner";
 

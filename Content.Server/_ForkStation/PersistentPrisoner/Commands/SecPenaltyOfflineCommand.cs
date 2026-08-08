@@ -1,7 +1,8 @@
 using System.Linq;
 using Content.Server.Administration;
-using Content.Shared.Administration;
+using Content.Shared._ForkStation.PersistentPrisoner;
 using Content.Shared.Mind;
+using Content.Shared.Roles;
 using Content.Shared.Roles.Jobs;
 using Robust.Server.Player;
 using Robust.Shared.Console;
@@ -17,7 +18,6 @@ namespace Content.Server._ForkStation.PersistentPrisoner.Commands;
 /// </summary>
 public sealed class SecPenaltyOfflineCommand : IConsoleCommand
 {
-    [Dependency] private readonly IPlayerManager _playerManager = default!;
     [Dependency] private readonly IPlayerLocator _locator = default!;
     [Dependency] private readonly IEntitySystemManager _systems = default!;
 
@@ -77,18 +77,33 @@ public sealed class SecPenaltyOfflineCommand : IConsoleCommand
         }
 
         var system = _systems.GetEntitySystem<PersistentPrisonerSystem>();
+        var roleSystem = _systems.GetEntitySystem<SharedRoleSystem>();
+        var userId = located.UserId.ToString();
+
+        var isAntag = mindSystem.TryGetMind(located.UserId, out var targetMindId, out _) &&
+                       roleSystem.MindIsAntagonist(targetMindId);
+        if (PrisonerDesignRules.ShouldSilentlySkipAntagPenalty(isAntag))
+        {
+            var apparent = system.GetPendingPlusOutstandingRounds(userId);
+            shell.WriteLine(PrisonerDesignRules.FormatSecPenaltyAppliedMessage(rounds, located.Username + " (dead/offline)", apparent));
+            return;
+        }
+
+        // Execution-class: sticks immediately (no custody gate); still sec-issued so same-round undo works.
         var record = system.AddPenalty(
-            located.UserId.ToString(),
+            userId,
             shell.Player.UserId.ToString(),
             shell.Player.Name,
             rounds,
             reason,
-            adminIssued: false);
+            adminIssued: false,
+            isExecution: true);
 
         if (record != null)
         {
-            var total = system.GetPenaltyRounds(located.UserId.ToString());
-            shell.WriteLine($"Applied {record.RoundsAssigned} penalty round(s) to {located.Username} (dead/offline). Total: {total}.");
+            var total = system.GetPendingPlusOutstandingRounds(userId);
+            shell.WriteLine(PrisonerDesignRules.FormatSecPenaltyAppliedMessage(
+                record.RoundsAssigned, located.Username + " (dead/offline)", total));
         }
         else
         {

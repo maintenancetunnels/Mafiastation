@@ -2,7 +2,9 @@ using System.Linq;
 using Content.Shared._ForkStation.PersistentPrisoner;
 using Content.Shared.Access.Systems;
 using Content.Shared.Mind;
+using Content.Shared.Roles;
 using Content.Shared.Roles.Jobs;
+// PrisonerDesignRules
 using Robust.Server.GameObjects;
 using Robust.Server.Player;
 using Robust.Shared.Player;
@@ -20,6 +22,7 @@ public sealed class PenaltyConsoleSystem : EntitySystem
     [Dependency] private readonly PersistentPrisonerSystem _penalties = default!;
     [Dependency] private readonly SharedJobSystem _jobs = default!;
     [Dependency] private readonly SharedMindSystem _mind = default!;
+    [Dependency] private readonly SharedRoleSystem _roles = default!;
     [Dependency] private readonly IPlayerManager _playerManager = default!;
 
     public override void Initialize()
@@ -84,6 +87,15 @@ public sealed class PenaltyConsoleSystem : EntitySystem
             issuerName = meta.EntityName;
         }
 
+        // Antags cannot accumulate; refresh UI without naming the reason (looks like a no-op refresh).
+        var isAntag = _mind.TryGetMind(targetSession.UserId, out var targetMindId, out _) &&
+                       _roles.MindIsAntagonist(targetMindId);
+        if (PrisonerDesignRules.ShouldSilentlySkipAntagPenalty(isAntag))
+        {
+            UpdateUi(ent);
+            return;
+        }
+
         _penalties.AddPenalty(
             targetSession.UserId.ToString(),
             msg.Actor.ToString(),
@@ -100,6 +112,10 @@ public sealed class PenaltyConsoleSystem : EntitySystem
         if (!_access.IsAllowed(msg.Actor, ent))
             return;
 
+        // Same policy as secpenaltyundo: only non-admin, same-round penalties.
+        if (!_penalties.CanSecurityUndo(msg.PenaltyId, out _))
+            return;
+
         _penalties.RemovePenalty(msg.PenaltyId);
         UpdateUi(ent);
     }
@@ -109,11 +125,11 @@ public sealed class PenaltyConsoleSystem : EntitySystem
         // Build player list: online players + offline players with active penalties
         var players = new Dictionary<string, PenaltyPlayerEntry>();
 
-        // Add all online players
+        // Add all online players — show pending+outstanding so mid-round issues are visible.
         foreach (var session in _playerManager.Sessions)
         {
             var userId = session.UserId.ToString();
-            var totalPenalties = _penalties.GetPenaltyRounds(userId);
+            var totalPenalties = _penalties.GetPendingPlusOutstandingRounds(userId);
             var jobTitle = "Unknown";
 
             if (session.AttachedEntity is { Valid: true } attached
@@ -126,7 +142,7 @@ public sealed class PenaltyConsoleSystem : EntitySystem
             players[session.Name] = new PenaltyPlayerEntry(userId, totalPenalties, jobTitle);
         }
 
-        // Add offline players who have active penalties
+        // Add offline players who have confirmed outstanding (force-spawn balance).
         var allPenalized = _penalties.GetPenaltySummary();
         var onlineUserIds = new HashSet<string>();
         foreach (var entry in players.Values)
@@ -142,7 +158,7 @@ public sealed class PenaltyConsoleSystem : EntitySystem
             players[displayName] = new PenaltyPlayerEntry(userId, rounds, "Offline");
         }
 
-        // Get penalties for selected player
+        // Get penalties for selected player (includes pending records).
         List<PenaltyDisplayRecord>? selectedPenalties = null;
         if (ent.Comp.SelectedPlayer != null && players.TryGetValue(ent.Comp.SelectedPlayer, out var selectedEntry))
         {

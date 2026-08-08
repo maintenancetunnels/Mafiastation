@@ -40,7 +40,6 @@ public sealed class LlmNpcHybridSystem : EntitySystem
     [Dependency] private readonly IAdminLogManager _adminLogs = default!;
     [Dependency] private readonly AiSelfSnapshotSystem _selfSnapshot = default!;
 
-    private static readonly ISawmill Sawmill = Logger.GetSawmill("mafia.llm.npc-hybrid");
     private TimeSpan _nextUpdate;
 
     public override void Initialize()
@@ -158,12 +157,12 @@ public sealed class LlmNpcHybridSystem : EntitySystem
                     ignoreCooldown: false,
                     out var escalationError))
             {
-                Sawmill.Info(
+                Log.Info(
                     $"Queued hybrid escalation for {ToPrettyString(uid)}: {reason}.");
             }
             else
             {
-                Sawmill.Warning(
+                Log.Warning(
                     $"Hybrid escalation for {ToPrettyString(uid)} was refused: {escalationError}");
             }
         }
@@ -311,7 +310,7 @@ public sealed class LlmNpcHybridSystem : EntitySystem
 
     private void OnHybridEnabledChanged(bool enabled)
     {
-        Sawmill.Info($"Hybrid NPC executive gate changed: enabled={enabled}.");
+        Log.Info($"Hybrid NPC executive gate changed: enabled={enabled}.");
         if (enabled)
             return;
 

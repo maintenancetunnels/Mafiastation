@@ -2,11 +2,15 @@ using System.Linq;
 using System.Net;
 using System.Numerics;
 using System.Threading;
+using Content.Server.Database;
 using Content.Server.GameTicking;
 using Content.Server.NPC.Pathfinding;
 using Content.Server.Station.Systems;
 using Content.Shared._ForkStation.AiPilot;
 using Content.Shared.CCVar;
+using Content.Shared.Damage;
+using Content.Shared.Damage.Components;
+using Content.Shared.Damage.Systems;
 using Content.Shared.GameTicking;
 using Content.Shared.Mind;
 using Content.Shared.Roles;
@@ -45,9 +49,10 @@ public sealed class AiPilotServerSystem : EntitySystem
     [Dependency] private readonly StationJobsSystem _stationJobs = default!;
     [Dependency] private readonly SharedMindSystem _mind = default!;
     [Dependency] private readonly SharedJobSystem _jobs = default!;
+    [Dependency] private readonly ISharedPlayerManager _players = default!;
+    [Dependency] private readonly UserDbDataManager _userDb = default!;
 
     private readonly Dictionary<NetUserId, Queue<TimeSpan>> _requestTimes = new();
-    private static readonly ISawmill Sawmill = Logger.GetSawmill("mafia.ai_pilot.server");
 
     public override void Initialize()
     {
@@ -55,6 +60,80 @@ public sealed class AiPilotServerSystem : EntitySystem
         SubscribeNetworkEvent<AiPilotAuthorizationRequestEvent>(OnAuthorizationRequest);
         SubscribeNetworkEvent<AiPilotPathRequestEvent>(OnPathRequest);
         SubscribeNetworkEvent<AiPilotLifecycleRequestEvent>(OnLifecycleRequest);
+        SubscribeLocalEvent<DamageableComponent, DamageChangedEvent>(OnPilotDamageChanged);
+    }
+
+    private void OnPilotDamageChanged(
+        Entity<DamageableComponent> victim,
+        ref DamageChangedEvent args)
+    {
+        if (!args.DamageIncreased ||
+            args.DamageDelta == null ||
+            !_players.TryGetSessionByEntity(victim.Owner, out var session) ||
+            !TryAuthorize(session, out _))
+        {
+            return;
+        }
+
+        var amount = args.DamageDelta.GetTotal().Float();
+        if (!float.IsFinite(amount) || amount <= 0f)
+            return;
+
+        var hasSource = TryGetPerceivedDamageSource(
+            victim.Owner,
+            args.Origin,
+            out var source,
+            out var sourceName);
+        RaiseNetworkEvent(
+            new AiPilotDamageEvent(
+                amount,
+                hasSource,
+                hasSource ? GetNetEntity(source) : NetEntity.Invalid,
+                sourceName),
+            session.Channel);
+    }
+
+    private bool TryGetPerceivedDamageSource(
+        EntityUid victim,
+        EntityUid? candidate,
+        out EntityUid source,
+        out string sourceName)
+    {
+        source = default;
+        sourceName = string.Empty;
+        if (candidate is not { } origin ||
+            origin == victim ||
+            !Exists(origin) ||
+            !TryComp(victim, out TransformComponent? victimTransform) ||
+            !TryComp(origin, out TransformComponent? sourceTransform))
+        {
+            return false;
+        }
+
+        var victimMap = _transform.GetMapCoordinates(victim, victimTransform);
+        var sourceMap = _transform.GetMapCoordinates(origin, sourceTransform);
+        if (victimMap.MapId != sourceMap.MapId ||
+            Vector2.Distance(victimMap.Position, sourceMap.Position) > GetObservationRadius())
+        {
+            return false;
+        }
+
+        source = origin;
+        sourceName = NormalizePerceivedName(Name(origin));
+        return sourceName.Length > 0;
+    }
+
+    private static string NormalizePerceivedName(string value)
+    {
+        const int maximumCharacters = 80;
+        var normalized = string.Join(
+            " ",
+            value.Split(
+                new[] { ' ', '\t', '\r', '\n' },
+                StringSplitOptions.RemoveEmptyEntries));
+        return normalized.Length <= maximumCharacters
+            ? normalized
+            : normalized[..maximumCharacters];
     }
 
     private void OnAuthorizationRequest(
@@ -161,7 +240,7 @@ public sealed class AiPilotServerSystem : EntitySystem
         }
         catch (Exception exception)
         {
-            Sawmill.Error(
+            Log.Error(
                 $"Path request {message.RequestId} for {session.Name} failed: " +
                 $"{exception.GetType().Name}.");
             SendPathError(session, message, "Pilot path planning failed safely.");
@@ -344,6 +423,19 @@ public sealed class AiPilotServerSystem : EntitySystem
             return;
         }
 
+        // GameTicker.MakeJoinGame silently returns while the asynchronous user profile is still
+        // loading. Do not acknowledge a spawn that did not happen; the crew launcher treats this
+        // bounded failure as retryable and resubmits the same verified job request.
+        if (!_userDb.IsLoadComplete(session))
+        {
+            SendLifecycleResult(
+                session,
+                requestId,
+                false,
+                "Pilot player profile is still loading; retry join.");
+            return;
+        }
+
         EntityUid? selectedStation = null;
         foreach (var station in _stations.GetStations())
         {
@@ -368,7 +460,7 @@ public sealed class AiPilotServerSystem : EntitySystem
         }
 
         _ticker.MakeJoinGame(session, selectedStation.Value, jobId);
-        Sawmill.Info(
+        Log.Info(
             $"Allowlisted local AI pilot account {session.Name} requested late join as {jobId}.");
         SendLifecycleResult(session, requestId, true, string.Empty, jobId);
     }

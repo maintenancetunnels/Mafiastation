@@ -25,6 +25,10 @@
         layer:
         - TabletopMachineLayer
   - type: LightOnCollide
+  # _ForkStation: cameras remember who they saw. Vanilla cameras record nothing at all, so a
+  # murder in full view of one leaves no evidence unless somebody happened to be watching the
+  # monitor at that second. The design doc asks for exactly this.
+  - type: CameraSightings
   - type: PointLight
     enabled: false
     radius: 5

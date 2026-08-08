@@ -602,6 +602,16 @@ public sealed partial class AntagSelectionSystem : GameRuleSystem<AntagSelection
         if (!_jobs.CanBeAntag(session))
             return false;
 
+        // Begin Mafiastation - per-session antag eligibility veto.
+        // Raised here, while the candidate pool is being built, rather than at assignment time:
+        // TryMakeAntag has no re-pick, so a player rejected after pre-selection silently consumes
+        // an antag slot and the round runs short. Additive - with no subscriber, nothing changes.
+        var eligibility = new AntagSessionEligibilityEvent(ent, session, def);
+        RaiseLocalEvent(ref eligibility);
+        if (eligibility.Cancelled)
+            return false;
+        // End Mafiastation
+
         return true;
     }
 
@@ -644,6 +654,30 @@ public sealed partial class AntagSelectionSystem : GameRuleSystem<AntagSelection
         args.AgentName = Loc.GetString(name);
     }
 }
+
+// Begin Mafiastation
+/// <summary>
+/// Raised while the antag candidate pool is being built, to let content veto one specific player
+/// for one specific antag rule. Set <see cref="Cancelled"/> to exclude them.
+/// </summary>
+/// <remarks>
+/// Vetoing here rather than at assignment time matters: a player rejected after pre-selection
+/// costs the round an antag, because there is no re-pick.
+/// </remarks>
+[ByRefEvent]
+public record struct AntagSessionEligibilityEvent(
+    Entity<AntagSelectionComponent> GameRule,
+    ICommonSession Session,
+    AntagSelectionDefinition Definition)
+{
+    public readonly Entity<AntagSelectionComponent> GameRule = GameRule;
+    public readonly ICommonSession Session = Session;
+    public readonly AntagSelectionDefinition Definition = Definition;
+
+    /// <summary>Set to true to make this player ineligible for this rule.</summary>
+    public bool Cancelled;
+}
+// End Mafiastation
 
 /// <summary>
 /// Event raised on a game rule entity in order to determine what the antagonist entity will be.

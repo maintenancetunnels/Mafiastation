@@ -14,7 +14,6 @@ namespace Content.Server._ForkStation.PersistentPrisoner.Commands;
 public sealed class PenaltyAddCommand : LocalizedCommands
 {
     [Dependency] private readonly IPlayerLocator _locator = default!;
-    [Dependency] private readonly IPlayerManager _playerManager = default!;
 
     public override string Command => "penaltyadd";
 

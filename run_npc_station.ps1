@@ -32,10 +32,11 @@ $cv = @(
     '--cvar','mafia.llm.timeout_seconds=90',                               # local 7B is slow; give it room
     '--cvar','mafia.llm.requests_per_minute=120',                          # crew chatter needs many calls (default 2)
     '--cvar','mafia.director.enabled=true',                                # master LLM director gate
+    '--cvar','mafia.director.minimum_confidence=0.35',                     # let the director act instead of abstaining (default 0.7)
     '--cvar','mafia.director.npc_hybrid_enabled=true',                     # goal/capability escalation
     '--cvar','mafia.director.npc_dialogue_enabled=true',
     '--cvar','mafia.director.npc_dialogue_allow_speech=true',              # NPCs may speak IC
-    '--cvar','mafia.director.npc_dialogue_minimum_seconds=20',             # chatter cadence (default 120)
+    '--cvar','mafia.director.npc_dialogue_minimum_seconds=12',             # chatter cadence (default 120)
     "--cvar","mafia.crew.hybrid_count=$Crew"
 )
 $server = Start-Process -FilePath $dotnet -ArgumentList (@('exec', (Join-Path $root 'bin\Content.Server\Content.Server.dll'), '--config-file', (Join-Path $root 'server_config.toml')) + $cv) `

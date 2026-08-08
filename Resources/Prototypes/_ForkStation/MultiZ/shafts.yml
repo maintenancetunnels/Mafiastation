@@ -1,0 +1,61 @@
+# Multi-Z seams: a shaft on the upper level and its landing on the lower level, linked in code by
+# BasementSystem. The shaft is an open hole you fall through; the landing is where you arrive and
+# where a ladder lets you climb back up. Both carry MultiZLink, the seam for falling, air flow, and
+# blast propagation.
+- type: entity
+  id: MultiZShaft
+  name: open shaft
+  description: A ragged hole in the deck. It drops to the level below, and you can feel the draft.
+  placement:
+    mode: SnapgridCenter
+  components:
+  - type: MultiZLink
+  - type: StepTrigger
+    requiredTriggeredSpeed: 0
+    intersectRatio: 0.4
+  - type: Transform
+    anchored: true
+  # Indestructible, but Damageable so it registers explosions on its tile — that's the hook
+  # MultiZ explosion propagation listens to. No Destructible, so the shaft itself never breaks.
+  - type: Damageable
+    damageContainer: Inorganic
+  - type: Clickable
+  - type: InteractionOutline
+  - type: Sprite
+    sprite: Tiles/Planet/Chasms/basalt_chasm.rsi
+    drawdepth: BelowFloor
+    layers:
+    - state: chasm
+  - type: Physics
+    bodyType: Static
+  - type: Fixtures
+    fixtures:
+      fix1:
+        shape:
+          !type:PhysShapeAabb
+          bounds: "-0.5,-0.5,0.5,0.5"
+        layer:
+        - WallLayer
+        mask:
+        - ItemMask
+        density: 1000
+        hard: false
+
+- type: entity
+  id: MultiZLanding
+  name: shaft landing
+  suffix: MultiZ
+  description: The bottom of the shaft. A maintenance ladder is bolted to the wall here.
+  placement:
+    mode: SnapgridCenter
+  components:
+  - type: MultiZLink
+  - type: Transform
+    anchored: true
+  - type: Clickable
+  - type: InteractionOutline
+  - type: Sprite
+    sprite: Structures/stairs.rsi
+    drawdepth: FloorObjects
+    layers:
+    - state: stairs_dark

@@ -159,6 +159,40 @@ public sealed class PilotActionValidatorTests
     }
 
     [Test]
+    public void WrongJsonScalarTypesAreRejectedWithoutThrowing()
+    {
+        var observation = PilotJsonTests.Response(new
+        {
+            self = new { position = new { x = 0, y = 0 } },
+            capabilities = new
+            {
+                canMove = true,
+                canUseGoals = true,
+                canInteract = true,
+            },
+            entities = new[] { new { id = 12 } },
+        });
+        var actions = new[]
+        {
+            """{"action":"move","arguments":{"direction":"north","durationMs":"250"}}""",
+            """{"action":"goal","arguments":{"kind":"move_relative","x":"3","y":0}}""",
+            """{"action":"goal","arguments":{"kind":"move_relative","x":3,"y":0,"range":"1.25"}}""",
+            """{"action":"interact","arguments":{"targetId":"12"}}""",
+        };
+
+        foreach (var json in actions)
+        {
+            using var document = JsonDocument.Parse(json);
+            PilotActionValidation? result = null;
+            Assert.That(
+                () => result = _validator.Validate(document.RootElement, observation, false),
+                Throws.Nothing,
+                json);
+            Assert.That(result!.IsValid, Is.False, json);
+        }
+    }
+
+    [Test]
     public void RejectsActionWhenCurrentCapacityIsFalse()
     {
         var observation = PilotJsonTests.Response(new

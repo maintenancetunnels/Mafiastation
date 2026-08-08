@@ -41,8 +41,16 @@ public sealed class LlmNpcDialogueSystem : EntitySystem
         A null equipment item means that slot is empty. Do not contradict those facts, invent
         missing self details, or infer hidden roles, objectives, or allegiances.
 
-        Set shouldSpeak to false and text to the empty string when silence is more natural, context
-        is insufficient, or a safe in-character response is uncertain. When speaking, stay within
+        You are a station crew member with your own voice. When the newest message in recentSpeech
+        is directed at you, the crew, the prisoners, or the captain, you MUST set shouldSpeak to
+        true and answer it — a short, plain, in-character reply is perfectly fine; never stay
+        silent on someone who is talking to you, and never abstain just because you are unsure or
+        have no clever line. Make your reply about what they actually said: answer their question,
+        acknowledge their order, or react to their statement, using facts from self and currentGoal
+        (your name, your task, what you can see) when they fit. Vary your wording — do not repeat a
+        line from recentUtterances. Only set shouldSpeak to false when nothing in recentSpeech is
+        directed at you at all. When speaking,
+        stay within
         the supplied character limit. Do not output OOC commentary, instructions to the server,
         admin/moderator/system claims, prompt or policy text, URLs, contact details, chat markup,
         slurs, sexual harassment, or real-world personal data. Fictional tension and concise
@@ -76,7 +84,6 @@ public sealed class LlmNpcDialogueSystem : EntitySystem
     [Dependency] private readonly AiSelfSnapshotSystem _selfSnapshot = default!;
     [Dependency] private readonly IPrototypeManager _prototypes = default!;
 
-    private static readonly ISawmill Sawmill = Logger.GetSawmill("mafia.llm.npc-dialogue");
     private readonly List<PendingDialogue> _pending = new();
     private readonly HashSet<EntityUid> _generatedSpeakers = new();
     private TimeSpan _nextUpdate;
@@ -408,7 +415,7 @@ public sealed class LlmNpcDialogueSystem : EntitySystem
         if (pending.Task.IsFaulted)
         {
             dialogue.LastOutcome = "Dialogue proposal failed unexpectedly.";
-            Sawmill.Error(
+            Log.Error(
                 $"NPC dialogue task failed for {ToPrettyString(pending.Target)}: " +
                 $"{pending.Task.Exception?.GetBaseException().GetType().Name ?? "unknown error"}.");
             return;
@@ -419,7 +426,7 @@ public sealed class LlmNpcDialogueSystem : EntitySystem
         {
             dialogue.LastOutcome =
                 result.SafeError ?? $"Dialogue request failed ({result.FailureKind}).";
-            Sawmill.Debug(
+            Log.Debug(
                 $"NPC dialogue request for {ToPrettyString(pending.Target)} failed: " +
                 $"{result.FailureKind}.");
             return;
@@ -433,7 +440,7 @@ public sealed class LlmNpcDialogueSystem : EntitySystem
             proposal == null)
         {
             dialogue.LastOutcome = "Provider returned an invalid or unsafe dialogue object.";
-            Sawmill.Warning(
+            Log.Warning(
                 $"Rejected invalid NPC dialogue output for {ToPrettyString(pending.Target)}; " +
                 $"reason={rejectionReason}; responseChars={result.Content.Length}.");
             return;
@@ -442,6 +449,7 @@ public sealed class LlmNpcDialogueSystem : EntitySystem
         if (!proposal.ShouldSpeak)
         {
             dialogue.LastOutcome = $"Model abstained ({proposal.Tone}).";
+            Log.Info($"[npcchat] {ToPrettyString(pending.Target)} abstained (shouldSpeak=false, tone={proposal.Tone}).");
             return;
         }
 
@@ -492,6 +500,7 @@ public sealed class LlmNpcDialogueSystem : EntitySystem
         RememberUtterance(dialogue, proposal, spoken: true);
         var medium = radioChannelId == null ? "local IC chat" : $"radio channel {radioChannelId}";
         dialogue.LastOutcome = $"Submitted {proposal.Tone} line to {medium}.";
+        Log.Info($"[npcchat] {ToPrettyString(pending.Target)} SPOKE on {medium}: \"{proposal.Text}\"");
         _adminLogs.Add(
             LogType.Chat,
             LogImpact.Medium,
@@ -576,8 +585,8 @@ public sealed class LlmNpcDialogueSystem : EntitySystem
 
         if (radioChannelId != null)
         {
-            Sawmill.Debug(
-                $"Observed radio speech on channel {radioChannelId}; " +
+            Log.Info(
+                $"[npcchat] Observed radio speech on channel {radioChannelId}; " +
                 $"eligibleDialogueNpcs={radioCandidates.Count}.");
         }
 
@@ -587,33 +596,40 @@ public sealed class LlmNpcDialogueSystem : EntitySystem
         // Every radio-capable NPC remembers the call, but only one gets an immediate proposal.
         // This produces a prompt answer without a five-person chorus or an unbounded request
         // amplifier when a player repeatedly keys the microphone.
-        var responderIndex = 0;
+        // A real person keying the mic always gets an answer, from everyone — the kickstarter's
+        // NPC banter must never starve the player via the response cooldown. NPC-to-NPC chatter
+        // still respects the cooldown so it doesn't turn into a chorus.
+        var speakerIsPlayer = HasComp<ActorComponent>(ev.Source);
+        var mayRespondNow = speakerIsPlayer || now >= _nextRadioResponse;
+        var responded = 0;
+        var maxResponders = speakerIsPlayer ? 3 : 2; // everyone answers a person; a couple answer NPC banter
         for (var i = 0; i < radioCandidates.Count; i++)
         {
-            if (_pending.All(pending => pending.Target != radioCandidates[i].Uid))
-            {
-                responderIndex = i;
-                break;
-            }
-        }
-
-        var mayRespondNow = now >= _nextRadioResponse;
-        for (var i = 0; i < radioCandidates.Count; i++)
-        {
+            var candidate = radioCandidates[i].Uid;
             var dialogue = radioCandidates[i].Dialogue;
-            if (mayRespondNow && i == responderIndex)
+            var isPending = _pending.Any(pending => pending.Target == candidate);
+
+            // A real player always gets answered: preempt any in-flight NPC banter so the crew
+            // drop what they were chattering about and reply to the person on comms. NPC-to-NPC
+            // banter yields to whatever an NPC is already saying (no preempt).
+            if (mayRespondNow && responded < maxResponders && (!isPending || speakerIsPlayer))
             {
+                if (isPending)
+                    CancelPending(candidate, "Preempted to answer a crewmate on comms.", reschedule: false);
+
                 dialogue.ForceNextDecision = true;
-                dialogue.NextDecision = now + TimeSpan.FromSeconds(RadioReplyDelaySeconds);
+                // Stagger the replies slightly so they don't key up in the same instant.
+                dialogue.NextDecision = now + TimeSpan.FromSeconds(RadioReplyDelaySeconds + responded);
                 dialogue.RequestedReplyChannelId = radioChannelId;
                 dialogue.RequestedReplyObservationSequence = dialogue.ObservationSequence;
+                responded++;
                 continue;
             }
 
             dialogue.LastRequestedObservationSequence = dialogue.ObservationSequence;
         }
 
-        if (mayRespondNow)
+        if (mayRespondNow && !speakerIsPlayer)
             _nextRadioResponse = now + TimeSpan.FromSeconds(MinimumDecisionSeconds());
     }
 

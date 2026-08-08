@@ -2,6 +2,8 @@ using System.Linq;
 using Content.Shared.Atmos.Components;
 using Content.Shared.Body;
 using Content.Shared.Cuffs.Components;
+using Content.Shared.Damage.Components;
+using Content.Shared.Damage.Systems;
 using Content.Shared.Hands.Components;
 using Content.Shared.Hands.EntitySystems;
 using Content.Shared.Humanoid;
@@ -68,7 +70,9 @@ public sealed record AiSelfCondition(
     string? Thirst,
     bool? OnFire,
     bool? Standing,
-    bool? Cuffed);
+    bool? Cuffed,
+    float? TotalDamage = null,
+    string? DamageSeverity = null);
 
 public sealed record AiSelfActivity(
     string Controller,
@@ -98,6 +102,7 @@ public sealed class AiSelfSnapshotSystem : EntitySystem
     [Dependency] private readonly SharedHandsSystem _hands = default!;
     [Dependency] private readonly SharedJobSystem _jobs = default!;
     [Dependency] private readonly MobStateSystem _mobState = default!;
+    [Dependency] private readonly DamageableSystem _damageable = default!;
 
     public AiSelfSnapshot Capture(
         EntityUid uid,
@@ -319,7 +324,31 @@ public sealed class AiSelfSnapshotSystem : EntitySystem
             ? cuffable.CuffedHandCount > 0
             : null;
 
-        return new AiSelfCondition(lifeState, hunger, thirst, onFire, standing, cuffed);
+        float? totalDamage = null;
+        string? damageSeverity = null;
+        if (TryComp<DamageableComponent>(uid, out var damageable))
+        {
+            totalDamage = _damageable.GetTotalDamage((uid, damageable)).Float();
+            damageSeverity = lifeState switch
+            {
+                "dead" => "dead",
+                "critical" => "critical",
+                _ when totalDamage <= 0.01f => "uninjured",
+                _ when totalDamage < 25f => "minor",
+                _ when totalDamage < 50f => "moderate",
+                _ => "severe",
+            };
+        }
+
+        return new AiSelfCondition(
+            lifeState,
+            hunger,
+            thirst,
+            onFire,
+            standing,
+            cuffed,
+            totalDamage,
+            damageSeverity);
     }
 
     private static string Normalize(string value, int maximumCharacters)

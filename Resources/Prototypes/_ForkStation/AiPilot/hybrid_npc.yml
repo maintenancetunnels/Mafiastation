@@ -3,12 +3,17 @@
 - type: htnCompound
   id: MafiaHybridPrisonerRoutine
   branches:
+    # Still eat when hungry, or they eventually starve into crit.
     - tasks:
         - !type:HTNCompoundTask
           task: FoodCompound
+    # Hold position instead of roaming. IdleCompound picks a new SPOT and walks there, which
+    # scatters the crew across the station within a minute of spawning and makes them
+    # unfindable; IdleSpinCompound picks a new ANGLE, so they stay where they were placed
+    # (the bar) and still read as alive.
     - tasks:
         - !type:HTNCompoundTask
-          task: IdleCompound
+          task: IdleSpinCompound
 
 # These are simulated crew rather than silent test dummies. Their headset is ordinary station
 # equipment: radio transmission still passes through the normal channel, hands, cuffs, speech,

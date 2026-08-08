@@ -124,7 +124,8 @@ public sealed class PilotActionValidator
         var duration = 250;
         if (arguments.TryGetProperty("durationMs", out var durationElement))
         {
-            if (!durationElement.TryGetInt32(out duration))
+            if (durationElement.ValueKind != JsonValueKind.Number ||
+                !durationElement.TryGetInt32(out duration))
                 return PilotActionValidation.Invalid("Move durationMs must be an integer.");
             duration = Math.Clamp(duration, 50, 1000);
         }
@@ -248,7 +249,9 @@ public sealed class PilotActionValidator
         out string error)
     {
         targetId = default;
-        if (!arguments.TryGetProperty("targetId", out var targetElement) || !targetElement.TryGetInt32(out targetId))
+        if (!arguments.TryGetProperty("targetId", out var targetElement) ||
+            targetElement.ValueKind != JsonValueKind.Number ||
+            !targetElement.TryGetInt32(out targetId))
         {
             error = "Target action requires an integer targetId.";
             return false;
@@ -266,7 +269,9 @@ public sealed class PilotActionValidator
     {
         var range = 1.25;
         if (arguments.TryGetProperty("range", out var rangeElement) &&
-            (!rangeElement.TryGetDouble(out range) || !double.IsFinite(range)))
+            (rangeElement.ValueKind != JsonValueKind.Number ||
+             !rangeElement.TryGetDouble(out range) ||
+             !double.IsFinite(range)))
         {
             return null;
         }
@@ -277,6 +282,7 @@ public sealed class PilotActionValidator
     {
         value = default;
         return arguments.TryGetProperty(property, out var element) &&
+               element.ValueKind == JsonValueKind.Number &&
                element.TryGetDouble(out value) &&
                double.IsFinite(value);
     }

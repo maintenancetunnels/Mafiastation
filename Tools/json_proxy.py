@@ -120,14 +120,10 @@ def _is_direct_radio_request(payload):
         if not medium.startswith("radio:") or not text.strip():
             return False
 
-        request_cues = re.compile(
-            r"\?|\b(answer|respond|reply|report|confirm|state|tell|identify|"
-            r"anyone|anybody|somebody|can you|could you|will you|are you|do you|"
-            r"need help|need someone|requesting|status)\b")
-        emergency_cues = re.compile(
-            r"\b(help|emergency|breach|fire|attacked|attack|danger|injured|"
-            r"medical emergency|security emergency)\b")
-        return bool(request_cues.search(text) or emergency_cues.search(text))
+        # Any radio call on comms plausibly wants a response — a person only keys the mic on
+        # purpose. Greetings, names, and questions with no '?' ("hello, who is here") all count.
+        # NPC-to-NPC replies never reach here: the server does not re-trigger generated speech.
+        return True
     return False
 
 

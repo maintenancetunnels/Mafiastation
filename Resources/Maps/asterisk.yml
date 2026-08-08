@@ -82640,3 +82640,19 @@ entities:
       pos: -32.359737,-18.431936
       parent: 2
 ...
+
+- proto: SpawnPointPrisonerSolitary
+  entities:
+  - uid: 14001
+    components:
+    - type: Transform
+      pos: -36.5,16.5
+      parent: 2
+- proto: ComputerPenaltyConsole
+  entities:
+  - uid: 14002
+    components:
+    - type: Transform
+      rot: 1.5707963267948966 rad
+      pos: -11.5,7.5
+      parent: 2

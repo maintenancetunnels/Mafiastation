@@ -35,3 +35,5 @@ mafiastation-accuse-dead = The dead cannot accuse.
 mafiastation-roundend-header = [color=#8a7f9e]Post-shift anomalous activity summary:[/color]
 mafiastation-roundend-whispers = [color=#8a7f9e]{$count} transmissions were received that were never sent.[/color]
 mafiastation-roundend-sightings = [color=#8a7f9e]{$count} reported sightings could not be verified.[/color]
+
+mafiastation-multiz-climb = You climb the ladder up.

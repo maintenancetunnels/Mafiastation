@@ -39,11 +39,13 @@
     # _CE ZLevels: real stacked decks. Below the station is a genuine z-level you can
     # descend into (with rendering, gravity, falling); above is open sky. Populated
     # basement decks are authored map files dropped into mapsBelow.
-    - type: CEStationZLevels
-      mapsBelow:
-        - /Maps/_CE/empty.yml
-      mapsAbove:
-        - /Maps/_CE/clouds.yml
+    # DISABLED: the _CE port is missing the CEZLevelEye prototype (crashes round start).
+    # Two-Z basement is pending the BasementSystem-vs-CEStationZLevels decision anyway.
+    #- type: CEStationZLevels
+    #  mapsBelow:
+    #    - /Maps/_CE/empty.yml
+    #  mapsAbove:
+    #    - /Maps/_CE/clouds.yml
 
 - type: entity
   id: NanotrasenCentralCommand

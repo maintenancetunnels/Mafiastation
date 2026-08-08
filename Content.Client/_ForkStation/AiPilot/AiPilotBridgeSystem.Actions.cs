@@ -30,13 +30,16 @@ namespace Content.Client._ForkStation.AiPilot;
 
 public sealed partial class AiPilotBridgeSystem
 {
-    private const float TargetLeaseSeconds = 6f;
+    private const float TargetLeaseSeconds = 30f;
     private const float GoalWaypointTolerance = 0.35f;
     private const float GoalProgressEpsilon = 0.03f;
     private const float GoalStallSeconds = 4f;
     private const int MaximumRecentSpeech = 16;
+    private const int MaximumRecentIncidents = 8;
     private const int MaximumObservedSpeechCharacters = 300;
-    private static readonly TimeSpan ObservedSpeechMemory = TimeSpan.FromMinutes(3);
+    private static readonly TimeSpan ObservedSpeechMemory = TimeSpan.FromSeconds(45);
+    private static readonly TimeSpan ObservedIncidentMemory = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan OwnRadioEchoWindow = TimeSpan.FromSeconds(10);
 
     [Dependency] private readonly IInputManager _inputManager = default!;
     [Dependency] private readonly IChatManager _chat = default!;
@@ -54,8 +57,10 @@ public sealed partial class AiPilotBridgeSystem
     private readonly Dictionary<EntityUid, int> _observedEntityIds = new();
     private readonly HashSet<BoundKeyFunction> _heldMovement = new();
     private readonly Queue<PilotObservedSpeech> _recentSpeech = new();
+    private readonly Queue<PilotObservedIncident> _recentIncidents = new();
     private ChatUIController? _chatController;
     private EntityUid? _speechOwner;
+    private int? _ownRadioSenderKey;
     private TimeSpan? _lastSpokeAt;
     private string? _lastSpeechChannel;
     private ActivePilotGoal? _goal;
@@ -67,6 +72,7 @@ public sealed partial class AiPilotBridgeSystem
         _input = EntityManager.System<InputSystem>();
         _chatController = _ui.GetUIController<ChatUIController>();
         _chatController.MessageAdded += OnChatMessage;
+        SubscribeNetworkEvent<AiPilotDamageEvent>(OnPilotDamage);
     }
 
     partial void ShutdownActions()
@@ -77,6 +83,7 @@ public sealed partial class AiPilotBridgeSystem
         CancelAllActions("AI pilot bridge shut down.");
         _observedTargets.Clear();
         _observedEntityIds.Clear();
+        _recentIncidents.Clear();
     }
 
     partial void UpdateActions(float frameTime)
@@ -125,18 +132,107 @@ public sealed partial class AiPilotBridgeSystem
         if (text.Length == 0)
             return;
 
+        if (IsOwnSpeechEcho(message, text))
+            return;
+
+        var wrappedSpeaker = NormalizeObservedSpeech(
+            SharedChatSystem.GetStringInsideTag(message, "Name"));
         var speaker = sender.IsValid() && Exists(sender)
             ? Name(sender)
-            : message.Channel == ChatChannel.Radio
-                ? "radio speaker"
-                : "unknown speaker";
-        while (_recentSpeech.Count >= MaximumRecentSpeech)
-            _recentSpeech.Dequeue();
-        _recentSpeech.Enqueue(new PilotObservedSpeech(
+            : wrappedSpeaker.Length > 0
+                ? wrappedSpeaker
+                : message.Channel == ChatChannel.Radio
+                    ? "unknown radio speaker"
+                    : "unknown speaker";
+        RememberSpeech(
             _timing.CurTime,
             speaker,
             text,
-            message.Channel.ToString().ToLowerInvariant()));
+            message.Channel.ToString().ToLowerInvariant(),
+            outgoing: false,
+            unread: true);
+        InterruptForPerception("Pilot paused its current action to consider new in-world speech.");
+    }
+
+    private bool IsOwnSpeechEcho(ChatMessage message, string text)
+    {
+        if (message.Channel != ChatChannel.Radio)
+            return false;
+
+        if (message.SenderKey is { } senderKey && _ownRadioSenderKey == senderKey)
+            return true;
+
+        var oldest = _timing.CurTime - OwnRadioEchoWindow;
+        var matchesRecentOutgoing = _recentSpeech.Any(speech =>
+            speech.Outgoing &&
+            speech.Channel == "radio" &&
+            speech.ObservedAt >= oldest &&
+            string.Equals(speech.Message, text, StringComparison.Ordinal));
+        if (!matchesRecentOutgoing)
+            return false;
+
+        if (message.SenderKey is { } matchedSenderKey)
+            _ownRadioSenderKey = matchedSenderKey;
+        return true;
+    }
+
+    private void OnPilotDamage(AiPilotDamageEvent message)
+    {
+        if (!_cfg.GetCVar(CCVars.MafiaAiPilotClientEnabled) ||
+            _players.LocalEntity is not { } controlled)
+        {
+            return;
+        }
+
+        EnsureSpeechOwner(controlled);
+        EntityUid? source = null;
+        if (message.HasSource)
+        {
+            var candidate = GetEntity(message.Source);
+            if (candidate.IsValid() && Exists(candidate) && candidate != controlled)
+                source = candidate;
+        }
+
+        while (_recentIncidents.Count >= MaximumRecentIncidents)
+            _recentIncidents.Dequeue();
+        _recentIncidents.Enqueue(new PilotObservedIncident(
+            _timing.CurTime,
+            "damage",
+            MathF.Max(0f, message.Amount),
+            source,
+            NormalizeObservedSpeech(message.SourceName),
+            unread: true));
+        InterruptForPerception("Pilot action was interrupted by incoming damage.");
+    }
+
+    private void RememberSpeech(
+        TimeSpan observedAt,
+        string speaker,
+        string message,
+        string channel,
+        bool outgoing,
+        bool unread)
+    {
+        while (_recentSpeech.Count >= MaximumRecentSpeech)
+            _recentSpeech.Dequeue();
+        _recentSpeech.Enqueue(new PilotObservedSpeech(
+            observedAt,
+            NormalizeObservedSpeech(speaker),
+            NormalizeObservedSpeech(message),
+            channel,
+            outgoing,
+            unread));
+    }
+
+    private void InterruptForPerception(string reason)
+    {
+        _manualMoveDeadline = TimeSpan.Zero;
+        SetHeldMovement(Array.Empty<BoundKeyFunction>());
+        if (_goal?.State is not (AiPilotGoalState.Planning or AiPilotGoalState.Moving))
+            return;
+
+        _goal.State = AiPilotGoalState.Cancelled;
+        _goal.Error = reason;
     }
 
     partial void OnPathResult(AiPilotPathResultEvent message)
@@ -279,12 +375,13 @@ public sealed partial class AiPilotBridgeSystem
                     goal = BuildGoalStatus(),
                     entities = Array.Empty<object>(),
                     recentSpeech = Array.Empty<object>(),
+                    recentIncidents = Array.Empty<object>(),
                     speech = BuildSpeechState(),
                 });
         }
 
         EnsureSpeechOwner(controlled);
-        PruneObservedSpeech();
+        PrunePerceptionMemory();
         var selfMap = _transform.GetMapCoordinates(controlled, controlledTransform);
         var radius = Math.Clamp(_authorization.ObservationRadius, 1f, 30f);
         var maximum = Math.Clamp(_authorization.MaximumObservedEntities, 1, 128);
@@ -359,6 +456,36 @@ public sealed partial class AiPilotBridgeSystem
             controlled,
             BuildSelfActivity(),
             _assignedJobId);
+        var recentSpeech = _recentSpeech.Select(memory => new
+        {
+            ageSeconds = (int) Math.Clamp(
+                (_timing.CurTime - memory.ObservedAt).TotalSeconds,
+                0,
+                int.MaxValue),
+            memory.Speaker,
+            memory.Message,
+            memory.Channel,
+            memory.Outgoing,
+            memory.Unread,
+        }).ToArray();
+        var recentIncidents = _recentIncidents.Select(memory => new
+        {
+            ageSeconds = (int) Math.Clamp(
+                (_timing.CurTime - memory.ObservedAt).TotalSeconds,
+                0,
+                int.MaxValue),
+            memory.Kind,
+            memory.Amount,
+            sourceId = memory.Source is { } source && Exists(source)
+                ? LeaseObservedTarget(source)
+                : (int?) null,
+            sourceName = memory.SourceName.Length > 0 ? memory.SourceName : null,
+            memory.Unread,
+        }).ToArray();
+        foreach (var memory in _recentSpeech)
+            memory.Unread = false;
+        foreach (var memory in _recentIncidents)
+            memory.Unread = false;
 
         return AiPilotPipeResponse.Success(
             request.Id,
@@ -388,16 +515,8 @@ public sealed partial class AiPilotBridgeSystem
                 capabilities = BuildCapabilities(),
                 goal = BuildGoalStatus(),
                 entities,
-                recentSpeech = _recentSpeech.Select(memory => new
-                {
-                    ageSeconds = (int) Math.Clamp(
-                        (_timing.CurTime - memory.ObservedAt).TotalSeconds,
-                        0,
-                        int.MaxValue),
-                    memory.Speaker,
-                    memory.Message,
-                    memory.Channel,
-                }).ToArray(),
+                recentSpeech,
+                recentIncidents,
                 speech = BuildSpeechState(),
             });
     }
@@ -467,16 +586,22 @@ public sealed partial class AiPilotBridgeSystem
     private void ClearSpeechMemory()
     {
         _recentSpeech.Clear();
+        _recentIncidents.Clear();
         _speechOwner = null;
+        _ownRadioSenderKey = null;
         _lastSpokeAt = null;
         _lastSpeechChannel = null;
     }
 
-    private void PruneObservedSpeech()
+    private void PrunePerceptionMemory()
     {
-        var oldest = _timing.CurTime - ObservedSpeechMemory;
-        while (_recentSpeech.TryPeek(out var speech) && speech.ObservedAt < oldest)
+        var oldestSpeech = _timing.CurTime - ObservedSpeechMemory;
+        while (_recentSpeech.TryPeek(out var speech) && speech.ObservedAt < oldestSpeech)
             _recentSpeech.Dequeue();
+
+        var oldestIncident = _timing.CurTime - ObservedIncidentMemory;
+        while (_recentIncidents.TryPeek(out var incident) && incident.ObservedAt < oldestIncident)
+            _recentIncidents.Dequeue();
     }
 
     private static string NormalizeObservedSpeech(string message)
@@ -933,6 +1058,13 @@ public sealed partial class AiPilotBridgeSystem
         _chat.SendMessage(
             transmittedText,
             channel == "radio" ? ChatSelectChannel.Radio : ChatSelectChannel.Local);
+        RememberSpeech(
+            _timing.CurTime,
+            Name(controlled),
+            text,
+            channel,
+            outgoing: true,
+            unread: false);
         _lastSpokeAt = _timing.CurTime;
         _lastSpeechChannel = channel;
         _nextSpeechAt =
@@ -1296,11 +1428,37 @@ public sealed partial class AiPilotBridgeSystem
         Vector2 Position,
         float Distance);
 
-    private sealed record PilotObservedSpeech(
-        TimeSpan ObservedAt,
-        string Speaker,
-        string Message,
-        string Channel);
+    private sealed class PilotObservedSpeech(
+        TimeSpan observedAt,
+        string speaker,
+        string message,
+        string channel,
+        bool outgoing,
+        bool unread)
+    {
+        public TimeSpan ObservedAt { get; } = observedAt;
+        public string Speaker { get; } = speaker;
+        public string Message { get; } = message;
+        public string Channel { get; } = channel;
+        public bool Outgoing { get; } = outgoing;
+        public bool Unread = unread;
+    }
+
+    private sealed class PilotObservedIncident(
+        TimeSpan observedAt,
+        string kind,
+        float amount,
+        EntityUid? source,
+        string sourceName,
+        bool unread)
+    {
+        public TimeSpan ObservedAt { get; } = observedAt;
+        public string Kind { get; } = kind;
+        public float Amount { get; } = amount;
+        public EntityUid? Source { get; } = source;
+        public string SourceName { get; } = sourceName;
+        public bool Unread = unread;
+    }
 
     private sealed class ObservedTargetLease(EntityUid entity, TimeSpan expiresAt)
     {

@@ -172,7 +172,28 @@ public sealed class CrewRunner
                     deadline.Token);
                 if (exchange.Response.Ok && IsAttached(exchange.Response))
                     return;
-                lastError = exchange.Response.Error;
+
+                lastError = exchange.Response.Error ??
+                    "The server accepted the job but has not attached the player character yet.";
+
+                // SS14 can accept a late-join request just before its asynchronous user profile
+                // finishes loading. GameTicker then drops that spawn attempt without a response.
+                // Reissue the idempotent, verified join while we wait so the player attaches as
+                // soon as the profile is ready instead of idling headless until setup times out.
+                var retryJoin = await SendRecordedAsync(
+                    agent.Name,
+                    transport,
+                    PilotRequest.Create("join", joinArguments),
+                    recorder,
+                    deadline.Token);
+                if (retryJoin.Response.Ok)
+                {
+                    VerifyAssignedJob(agent.Job, retryJoin.Response);
+                }
+                else
+                {
+                    lastError = retryJoin.Response.Error ?? lastError;
+                }
             }
             catch (Exception exception) when (exception is IOException or TimeoutException)
             {

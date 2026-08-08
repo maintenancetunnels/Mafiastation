@@ -64,6 +64,24 @@ public sealed class AiPilotAuthorizationStateEvent(
 }
 
 /// <summary>
+/// Sends one bounded, server-authored damage perception to the affected pilot. This is not a
+/// combat-log backchannel: the source is included only when it is a nearby world entity that the
+/// injured character could ordinarily perceive.
+/// </summary>
+[Serializable, NetSerializable]
+public sealed class AiPilotDamageEvent(
+    float amount,
+    bool hasSource,
+    NetEntity source,
+    string sourceName) : EntityEventArgs
+{
+    public float Amount { get; } = amount;
+    public bool HasSource { get; } = hasSource;
+    public NetEntity Source { get; } = source;
+    public string SourceName { get; } = sourceName;
+}
+
+/// <summary>
 /// Requests only a path, never server-side control of the player's entity. The server validates
 /// the destination/target and returns a bounded list of waypoints. The connected client traverses
 /// those waypoints using ordinary input commands.

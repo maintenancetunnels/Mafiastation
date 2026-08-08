@@ -5,7 +5,12 @@
   playTimeTracker: JobPrisoner
   startingGear: PrisonerGear
   alwaysUseSpawner: true
-  canBeAntag: false
+  # _ForkStation: prisoners MUST be nominally antag-eligible, because the eligibility veto in
+  # PrisonerAntagEligibilitySystem runs after this flag is checked. A hard false here would mean
+  # the crew could safely treat every prisoner as harmless, and the design doc wants the opposite:
+  # "not allowing players to metagame rule-out an escaped prisoner as an antag". The actual odds
+  # are tiny and taper to zero at 18 penalty rounds.
+  canBeAntag: true
 #  whitelistRequired: true
   icon: "JobIconPrisoner"
   supervisors: job-supervisors-security

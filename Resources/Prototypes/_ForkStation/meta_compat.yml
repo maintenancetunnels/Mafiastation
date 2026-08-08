@@ -1,0 +1,113 @@
+# Meta Station (Monolith port) compatibility stubs.
+#
+# Monolith's meta.yml places a handful of Monolith-specific loot/fixtures our Delta-V base
+# doesn't define: custom-caliber ammo (their _Mono gun system), telecom holopads, an AI-upload
+# nav beacon, and a contraband poster. Rather than drag in Monolith's whole cartridge/caliber
+# tree, these minimal stubs let the map deserialize cleanly (uids resolve, no dangling container
+# refs). They render as inert placeholders.
+#
+# FOLLOW-UP: for playability, replace the ammo stubs with real Delta-V ammo equivalents and the
+# holopads with our holopad structure. Tracked as a post-render task; structural map is unaffected.
+
+# --- Ammo / magazines (armory lockers) ---
+- type: entity
+  id: AmmoBox12_gaugeBeanbag
+  name: ammo box (beanbag)
+  suffix: Meta compat stub
+
+- type: entity
+  id: AmmoBox12_gaugeBuckshot
+  name: ammo box (buckshot)
+  suffix: Meta compat stub
+
+- type: entity
+  id: AmmoBox12_gaugePractice
+  name: ammo box (practice)
+  suffix: Meta compat stub
+
+- type: entity
+  id: AmmoBox45_magnumPractice
+  name: ammo box (.45 magnum practice)
+  suffix: Meta compat stub
+
+- type: entity
+  id: AmmoBox556x45mmPractice
+  name: ammo box (5.56x45mm practice)
+  suffix: Meta compat stub
+
+- type: entity
+  id: AmmoBox9x19mmPractice
+  name: ammo box (9x19mm practice)
+  suffix: Meta compat stub
+
+- type: entity
+  id: BoxMagazine9x19mmFMJ
+  name: magazine box (9x19mm FMJ)
+  suffix: Meta compat stub
+
+- type: entity
+  id: Magazine46x30mmSubMachineGunTopMountedFMJ
+  name: magazine (46x30mm SMG FMJ)
+  suffix: Meta compat stub
+
+- type: entity
+  id: Magazine556x45mmFMJ
+  name: magazine (5.56x45mm FMJ)
+  suffix: Meta compat stub
+
+- type: entity
+  id: Magazine556x45mmPractice
+  name: magazine (5.56x45mm practice)
+  suffix: Meta compat stub
+
+- type: entity
+  id: Magazine9x19mmPistolPractice
+  name: magazine (9x19mm pistol practice)
+  suffix: Meta compat stub
+
+- type: entity
+  id: Magazine9x19mmSubMachineGunFMJ
+  name: magazine (9x19mm SMG FMJ)
+  suffix: Meta compat stub
+
+- type: entity
+  id: Magazine9x19mmSubMachineGunPractice
+  name: magazine (9x19mm SMG practice)
+  suffix: Meta compat stub
+
+- type: entity
+  id: ShellShotgun12_gaugeBeanbag
+  name: shotgun shell (beanbag)
+  suffix: Meta compat stub
+
+- type: entity
+  id: SpeedLoader45_magnumPractice
+  name: speed loader (.45 magnum practice)
+  suffix: Meta compat stub
+
+# --- Telecom holopads ---
+- type: entity
+  id: HolopadCargoMailroom
+  name: holopad (cargo mailroom)
+  suffix: Meta compat stub
+
+- type: entity
+  id: HolopadSecurityBrigMed
+  name: holopad (brig medical)
+  suffix: Meta compat stub
+
+- type: entity
+  id: HolopadSecurityLockerRoom
+  name: holopad (locker room)
+  suffix: Meta compat stub
+
+# --- Misc fixtures ---
+- type: entity
+  id: DefaultStationBeaconAIUpload
+  name: AI upload beacon
+  suffix: Meta compat stub
+
+- type: entity
+  id: PosterContrabandLurkingExomorph
+  name: contraband poster
+  suffix: Meta compat stub

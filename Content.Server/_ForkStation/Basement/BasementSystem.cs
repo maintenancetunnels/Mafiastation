@@ -1,6 +1,7 @@
 using System.Numerics;
 using Content.Server.Station.Events;
 using Content.Server.Station.Systems;
+using Content.Shared._ForkStation.MultiZ;
 using Content.Shared.Station.Components;
 using Content.Server.StationEvents.Components;
 using Content.Shared.CCVar;
@@ -33,7 +34,6 @@ public sealed class BasementSystem : EntitySystem
     [Dependency] private readonly IRobustRandom _random = default!;
     [Dependency] private readonly IConfigurationManager _cfg = default!;
 
-    private static readonly ISawmill Log = Logger.GetSawmill("mafiastation.basement");
 
     private const string StairwellDownProto = "StairwellDown";
     private const string StairwellUpProto = "StairwellUp";
@@ -119,6 +119,18 @@ public sealed class BasementSystem : EntitySystem
         var down = Spawn(StairwellDownProto, downCoords);
         var up = Spawn(StairwellUpProto, upCoords);
         _link.TryLink(down, up);
+
+        // Multi-Z seam: a physical shaft next to the stairs. Unlike the teleport stairwell, this
+        // is the seam that couples the two levels — you fall through it, and air/blasts propagate
+        // across it (MultiZ atmos + explosion systems). Landing sits beside the basement stairwell.
+        var shaftCoords = downCoords.Offset(new Vector2(1f, 0f));
+        var landingCoords = upCoords.Offset(new Vector2(1f, 0f));
+        var shaft = Spawn("MultiZShaft", shaftCoords);
+        var landing = Spawn("MultiZLanding", landingCoords);
+        var shaftLink = EnsureComp<MultiZLinkComponent>(shaft);
+        var landingLink = EnsureComp<MultiZLinkComponent>(landing);
+        shaftLink.Down = landing;
+        landingLink.Up = shaft;
 
         // Populate the sublevel: solitary confinement lives down here now, contraband
         // makes it worth robbing, and something stands very still in the dark.

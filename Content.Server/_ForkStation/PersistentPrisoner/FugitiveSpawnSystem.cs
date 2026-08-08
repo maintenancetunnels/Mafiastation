@@ -4,6 +4,7 @@ using Content.Server.Spawners.Components;
 using Content.Server.Station.Systems;
 using Content.Shared._ForkStation.PersistentPrisoner;
 using Content.Shared.GameTicking;
+// PrisonerDesignRules lives in the same shared namespace.
 using Content.Shared.Hands.EntitySystems;
 using Content.Shared.Inventory;
 using Robust.Shared.Log;
@@ -35,11 +36,6 @@ public sealed class FugitiveSpawnSystem : EntitySystem
     [Dependency] private readonly SharedTransformSystem _transform = default!;
     [Dependency] private readonly IGameTiming _timing = default!;
 
-    private static readonly ISawmill Log = Logger.GetSawmill("persistent.prisoner.fugitive");
-
-    private const float BaseFugitiveChance = 0.18f;
-    private const int FugitiveDropoffThreshold = 5;
-    private const int FugitiveZeroThreshold = 20;
 
     private const string FugitiveJumpsuit = "ClothingUniformJumpsuitPrisoner";
     private const string FugitiveToolbox = "ToolboxMechanicalFilled";
@@ -127,15 +123,5 @@ public sealed class FugitiveSpawnSystem : EntitySystem
     public bool IsFugitive(string userId) => _fugitivesThisRound.Contains(userId);
 
     public static float GetFugitiveChance(int penaltyRounds)
-    {
-        if (penaltyRounds >= FugitiveZeroThreshold)
-            return 0f;
-
-        if (penaltyRounds <= FugitiveDropoffThreshold)
-            return BaseFugitiveChance;
-
-        var range = FugitiveZeroThreshold - FugitiveDropoffThreshold;
-        var progress = penaltyRounds - FugitiveDropoffThreshold;
-        return BaseFugitiveChance * (1f - (float)progress / range);
-    }
+        => PrisonerDesignRules.GetFugitiveChance(penaltyRounds);
 }

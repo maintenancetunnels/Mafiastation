@@ -1,6 +1,6 @@
 # Persistent Prisoner - Solitary Confinement Spawn Point
-# Prisoners with 15+ penalty rounds are relocated here after spawn (SolitaryConfinementSystem).
-# Not a job SpawnPoint on purpose: regular prisoner spawns must never pick it.
+# Prisoners with >15 outstanding penalty rounds are placed here by PersistentPrisonerSystem
+# force-spawn (PlayerBeforeSpawn). Not a job SpawnPoint: regular prisoner spawns must never pick it.
 - type: entity
   id: SpawnPointPrisonerSolitary
   parent: MarkerBase

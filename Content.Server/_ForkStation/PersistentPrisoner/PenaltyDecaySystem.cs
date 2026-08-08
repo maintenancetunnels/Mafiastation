@@ -1,36 +1,35 @@
-using System.Linq;
-using Content.Server.GameTicking;
 using Content.Server.GameTicking.Events;
-using Content.Shared._ForkStation.PersistentPrisoner;
-using Robust.Shared.Log;
+using Content.Shared.CCVar;
+using Robust.Shared.Configuration;
 
 namespace Content.Server._ForkStation.PersistentPrisoner;
 
 /// <summary>
-/// Automatically decays penalty rounds over time.
-/// At each round start, checks all active penalties. For each penalty,
-/// credits 1 served round per 48 hours elapsed since issuance (minus already served).
-/// This means penalties passively expire even if the player doesn't log in.
+/// Automatically decays confirmed outstanding penalty rounds over real time.
+/// Honors <see cref="CCVars.PersistentPrisonerDecay"/> and
+/// <see cref="CCVars.PersistentPrisonerDecayHours"/>.
 /// </summary>
 public sealed class PenaltyDecaySystem : EntitySystem
 {
     [Dependency] private readonly PersistentPrisonerSystem _penalties = default!;
+    [Dependency] private readonly IConfigurationManager _cfg = default!;
 
-    private static readonly ISawmill Log = Logger.GetSawmill("persistent.prisoner.decay");
-
-    /// <summary>
-    /// Hours per auto-decayed penalty round.
-    /// </summary>
-    private const double HoursPerDecay = 48.0;
+    private bool _decayEnabled = true;
+    private float _hoursPerDecay = 48f;
 
     public override void Initialize()
     {
         base.Initialize();
+        Subs.CVar(_cfg, CCVars.PersistentPrisonerDecay, v => _decayEnabled = v, true);
+        Subs.CVar(_cfg, CCVars.PersistentPrisonerDecayHours, v => _hoursPerDecay = v, true);
         SubscribeLocalEvent<RoundStartingEvent>(OnRoundStarting);
     }
 
     private void OnRoundStarting(RoundStartingEvent ev)
     {
+        if (!_decayEnabled || _hoursPerDecay <= 0f)
+            return;
+
         var summary = _penalties.GetPenaltySummary();
         var now = DateTime.UtcNow;
         var totalDecayed = 0;
@@ -42,15 +41,12 @@ public sealed class PenaltyDecaySystem : EntitySystem
             foreach (var penalty in penalties)
             {
                 var age = now - penalty.IssuedAt;
-                // How many rounds should have auto-decayed by now
-                var totalAutoDecay = (int)(age.TotalHours / HoursPerDecay);
-                // How many more need to be applied (beyond what's already served)
+                var totalAutoDecay = (int)(age.TotalHours / _hoursPerDecay);
                 var additionalDecay = totalAutoDecay - penalty.RoundsServed;
 
                 if (additionalDecay <= 0)
                     continue;
 
-                // Apply the decay by serving rounds
                 var toServe = Math.Min(additionalDecay, penalty.RoundsRemaining);
                 for (var i = 0; i < toServe; i++)
                 {
@@ -61,6 +57,6 @@ public sealed class PenaltyDecaySystem : EntitySystem
         }
 
         if (totalDecayed > 0)
-            Log.Info($"Auto-decayed {totalDecayed} penalty round(s) at round start.");
+            Log.Info($"Auto-decayed {totalDecayed} penalty round(s) at round start ({_hoursPerDecay}h each).");
     }
 }

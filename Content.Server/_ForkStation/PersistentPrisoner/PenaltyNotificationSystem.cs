@@ -15,7 +15,6 @@ public sealed class PenaltyNotificationSystem : EntitySystem
     [Dependency] private readonly PersistentPrisonerSystem _penalties = default!;
     [Dependency] private readonly IChatManager _chat = default!;
 
-    private static readonly ISawmill Log = Logger.GetSawmill("persistent.prisoner.notify");
 
     public override void Initialize()
     {

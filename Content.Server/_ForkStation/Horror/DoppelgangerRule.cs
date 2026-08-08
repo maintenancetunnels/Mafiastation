@@ -85,9 +85,9 @@ public sealed class DoppelgangerRule : StationEventSystem<DoppelgangerRuleCompon
 
         // Still standing at event end: it quietly stops having ever been there.
         if (component.Spawned is { } copy && !Deleted(copy)
-            && TryComp<DoppelgangerComponent>(copy, out var doppel)
-            && TryComp<TransformComponent>(copy, out var xform))
+            && TryComp<DoppelgangerComponent>(copy, out var doppel))
         {
+            var xform = Transform(copy);
             EntityManager.System<DoppelgangerSystem>().Dissolve(copy, doppel, xform);
         }
 

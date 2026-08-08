@@ -1,6 +1,5 @@
 using System.Linq;
-using Content.Server.Administration;
-using Content.Shared.Administration;
+using Content.Shared._ForkStation.PersistentPrisoner;
 using Content.Shared.Mind;
 using Content.Shared.Roles;
 using Content.Shared.Roles.Jobs;
@@ -20,7 +19,6 @@ public sealed class SecPenaltyCommand : IConsoleCommand
 {
     [Dependency] private readonly IPlayerManager _playerManager = default!;
     [Dependency] private readonly IEntitySystemManager _systems = default!;
-    [Dependency] private readonly IEntityManager _entities = default!;
 
     public string Command => "secpenalty";
     public string Description => "Apply penalty rounds to a player (Security Officer+).";
@@ -128,8 +126,20 @@ public sealed class SecPenaltyCommand : IConsoleCommand
         }
 
         var system = _systems.GetEntitySystem<PersistentPrisonerSystem>();
+        var userId = targetSession.UserId.ToString();
+
+        // Antags must not accumulate, but application must look the same to sec mid-round.
+        var isAntag = mindSystem.TryGetMind(targetSession.UserId, out var targetMindId, out _) &&
+                       _systems.GetEntitySystem<SharedRoleSystem>().MindIsAntagonist(targetMindId);
+        if (PrisonerDesignRules.ShouldSilentlySkipAntagPenalty(isAntag))
+        {
+            var apparent = system.GetPendingPlusOutstandingRounds(userId);
+            shell.WriteLine(PrisonerDesignRules.FormatSecPenaltyAppliedMessage(rounds, targetSession.Name, apparent));
+            return;
+        }
+
         var record = system.AddPenalty(
-            targetSession.UserId.ToString(),
+            userId,
             callerSession.UserId.ToString(),
             callerSession.Name,
             rounds,
@@ -138,8 +148,10 @@ public sealed class SecPenaltyCommand : IConsoleCommand
 
         if (record != null)
         {
-            var total = system.GetPenaltyRounds(targetSession.UserId.ToString());
-            shell.WriteLine($"Applied {record.RoundsAssigned} penalty round(s) to {targetSession.Name}. Total: {total}.");
+            // Include pending so a mid-round issue does not report Total: 0 on a clean target.
+            var total = system.GetPendingPlusOutstandingRounds(userId);
+            shell.WriteLine(PrisonerDesignRules.FormatSecPenaltyAppliedMessage(
+                record.RoundsAssigned, targetSession.Name, total));
         }
         else
         {

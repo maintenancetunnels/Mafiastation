@@ -25,6 +25,16 @@ public sealed class PenaltyDataStore
         Load();
     }
 
+    /// <summary>Test helper: construct against an explicit path without loading disk.</summary>
+    public PenaltyDataStore(string filePath, bool forTests)
+    {
+        _filePath = filePath;
+        _records = new List<PenaltyRecord>();
+        _nextId = 1;
+        if (!forTests)
+            Load();
+    }
+
     private void Load()
     {
         lock (_lock)
@@ -45,7 +55,22 @@ public sealed class PenaltyDataStore
             }
             catch (Exception ex)
             {
+                // Preserve the unreadable file instead of letting the next Save() overwrite it
+                // with an empty array. These records are the only record of why players are
+                // serving time; silently discarding them is worse than failing loudly.
                 Log.Error($"Failed to load penalties: {ex.Message}");
+
+                try
+                {
+                    var quarantine = _filePath + ".corrupt-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+                    File.Copy(_filePath, quarantine, overwrite: true);
+                    Log.Error($"Preserved the unreadable penalty file at {quarantine}.");
+                }
+                catch (Exception copyEx)
+                {
+                    Log.Error($"Could not preserve the unreadable penalty file: {copyEx.Message}");
+                }
+
                 _records = new List<PenaltyRecord>();
                 _nextId = 1;
             }
@@ -63,7 +88,15 @@ public sealed class PenaltyDataStore
                     Directory.CreateDirectory(dir);
 
                 var json = JsonSerializer.Serialize(_records, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(_filePath, json);
+
+                // Write-then-replace so a crash mid-write cannot truncate the live file.
+                var temp = _filePath + ".tmp";
+                File.WriteAllText(temp, json);
+
+                if (File.Exists(_filePath))
+                    File.Replace(temp, _filePath, destinationBackupFileName: null);
+                else
+                    File.Move(temp, _filePath);
             }
             catch (Exception ex)
             {
@@ -73,10 +106,11 @@ public sealed class PenaltyDataStore
     }
 
     /// <summary>
-    /// Add a new penalty record.
+    /// Add a new penalty record. Security issues set <paramref name="pendingCustody"/> so the
+    /// sentence only becomes outstanding force-spawn balance after end-round custody.
     /// </summary>
     public PenaltyRecord AddPenalty(string playerUserId, string issuedBy, string issuedByName,
-        int rounds, string reason, int roundId, bool adminIssued)
+        int rounds, string reason, int roundId, bool adminIssued, bool pendingCustody = false)
     {
         lock (_lock)
         {
@@ -92,6 +126,7 @@ public sealed class PenaltyDataStore
                 IssuedAt = DateTime.UtcNow,
                 IssuedRoundId = roundId,
                 AdminIssued = adminIssued,
+                PendingCustody = pendingCustody,
             };
 
             _records.Add(record);
@@ -101,22 +136,35 @@ public sealed class PenaltyDataStore
     }
 
     /// <summary>
-    /// Get all active (unserved) penalties for a player.
+    /// Get all active (unserved, confirmed) penalties for a player — force-spawn balance.
     /// </summary>
     public List<PenaltyRecord> GetActivePenalties(string playerUserId)
     {
         lock (_lock)
         {
             return _records
-                .Where(r => r.PlayerUserId == playerUserId && !r.IsServed)
+                .Where(r => r.PlayerUserId == playerUserId && r.CountsTowardBalance)
                 .ToList();
         }
     }
 
     /// <summary>
-    /// Get total outstanding penalty rounds for a player.
+    /// Outstanding force-spawn balance only (confirmed + unserved).
     /// </summary>
     public int GetTotalPenaltyRounds(string playerUserId)
+    {
+        lock (_lock)
+        {
+            return _records
+                .Where(r => r.PlayerUserId == playerUserId && r.CountsTowardBalance)
+                .Sum(r => r.RoundsRemaining);
+        }
+    }
+
+    /// <summary>
+    /// All unserved rounds for a player including still-pending custody sentences (for UI).
+    /// </summary>
+    public int GetPendingPlusOutstandingRounds(string playerUserId)
     {
         lock (_lock)
         {
@@ -126,9 +174,16 @@ public sealed class PenaltyDataStore
         }
     }
 
-    /// <summary>
-    /// Get all penalties (active and served) for a player.
-    /// </summary>
+    public List<PenaltyRecord> GetPendingPenalties(string playerUserId)
+    {
+        lock (_lock)
+        {
+            return _records
+                .Where(r => r.PlayerUserId == playerUserId && r.PendingCustody && !r.IsServed)
+                .ToList();
+        }
+    }
+
     public List<PenaltyRecord> GetAllPenalties(string playerUserId)
     {
         lock (_lock)
@@ -139,15 +194,12 @@ public sealed class PenaltyDataStore
         }
     }
 
-    /// <summary>
-    /// Serve one penalty round for a player. Applies to the oldest unserved penalty first.
-    /// </summary>
     public bool ServeRound(string playerUserId)
     {
         lock (_lock)
         {
             var oldest = _records
-                .Where(r => r.PlayerUserId == playerUserId && !r.IsServed)
+                .Where(r => r.PlayerUserId == playerUserId && r.CountsTowardBalance)
                 .OrderBy(r => r.IssuedAt)
                 .FirstOrDefault();
 
@@ -160,14 +212,11 @@ public sealed class PenaltyDataStore
         }
     }
 
-    /// <summary>
-    /// Serve one round on a specific penalty by ID. Used for auto-decay.
-    /// </summary>
     public bool ServeRoundOnPenalty(int penaltyId)
     {
         lock (_lock)
         {
-            var record = _records.FirstOrDefault(r => r.Id == penaltyId && !r.IsServed);
+            var record = _records.FirstOrDefault(r => r.Id == penaltyId && r.CountsTowardBalance);
             if (record == null)
                 return false;
 
@@ -177,9 +226,77 @@ public sealed class PenaltyDataStore
         }
     }
 
+    public PenaltyRecord? GetPenaltyById(int penaltyId)
+    {
+        lock (_lock)
+        {
+            return _records.FirstOrDefault(r => r.Id == penaltyId);
+        }
+    }
+
     /// <summary>
-    /// Remove a penalty by ID. Returns true if found and removed.
+    /// Confirm a pending security sentence after custody at round end.
+    /// Truncates against the lifetime cap if concurrent grants would otherwise exceed it.
     /// </summary>
+    public bool ConfirmPending(int penaltyId)
+    {
+        lock (_lock)
+        {
+            var record = _records.FirstOrDefault(r => r.Id == penaltyId && r.PendingCustody);
+            if (record == null)
+                return false;
+
+            // Defensive: never let confirmation push confirmed balance past the lifetime cap.
+            var otherOutstanding = _records
+                .Where(r => r.PlayerUserId == record.PlayerUserId && r.Id != record.Id && r.CountsTowardBalance)
+                .Sum(r => r.RoundsRemaining);
+            var room = PrisonerDesignRules.MaxPenaltyRounds - otherOutstanding;
+            if (room <= 0)
+            {
+                _records.Remove(record);
+                Save();
+                return false;
+            }
+
+            if (record.RoundsRemaining > room)
+                record.RoundsAssigned = record.RoundsServed + room;
+
+            record.PendingCustody = false;
+            Save();
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Drop unconfirmed security sentences that did not stick (escape / not in custody).
+    /// </summary>
+    public int DiscardPendingForPlayer(string playerUserId)
+    {
+        lock (_lock)
+        {
+            var count = _records.RemoveAll(r =>
+                r.PlayerUserId == playerUserId && r.PendingCustody && !r.IsServed);
+            if (count > 0)
+                Save();
+            return count;
+        }
+    }
+
+    /// <summary>
+    /// Discard every still-pending sentence for the current round that was not confirmed.
+    /// Call after the custody-confirmation pass.
+    /// </summary>
+    public int DiscardAllRemainingPending()
+    {
+        lock (_lock)
+        {
+            var count = _records.RemoveAll(r => r.PendingCustody && !r.IsServed);
+            if (count > 0)
+                Save();
+            return count;
+        }
+    }
+
     public bool RemovePenalty(int penaltyId)
     {
         lock (_lock)
@@ -194,9 +311,6 @@ public sealed class PenaltyDataStore
         }
     }
 
-    /// <summary>
-    /// Wipe all penalties for a player. Admin-only operation.
-    /// </summary>
     public int WipePenalties(string playerUserId)
     {
         lock (_lock)
@@ -208,17 +322,27 @@ public sealed class PenaltyDataStore
         }
     }
 
-    /// <summary>
-    /// Get a summary of all players with active penalties.
-    /// </summary>
     public Dictionary<string, int> GetAllActivePenaltySummary()
     {
         lock (_lock)
         {
             return _records
-                .Where(r => !r.IsServed)
+                .Where(r => r.CountsTowardBalance)
                 .GroupBy(r => r.PlayerUserId)
                 .ToDictionary(g => g.Key, g => g.Sum(r => r.RoundsRemaining));
+        }
+    }
+
+    /// <summary>
+    /// Rounds applied this shift that still count against the per-round cap: pending + confirmed
+    /// unserved issued this round, plus served amount from this round's grants is not tracked
+    /// separately — callers track applied-this-round in memory.
+    /// </summary>
+    public IReadOnlyList<PenaltyRecord> Snapshot()
+    {
+        lock (_lock)
+        {
+            return _records.ToList();
         }
     }
 }

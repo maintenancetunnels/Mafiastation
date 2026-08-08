@@ -55,7 +55,6 @@ public sealed class LlmGameplayDirectorSystem : EntitySystem
     [Dependency] private readonly HTNSystem _htn = default!;
     [Dependency] private readonly GameTicker _ticker = default!;
 
-    private static readonly ISawmill Sawmill = Logger.GetSawmill("mafia.llm.director");
     private static readonly JsonSerializerOptions PromptJsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -560,7 +559,7 @@ public sealed class LlmGameplayDirectorSystem : EntitySystem
         }
         catch (Exception exception)
         {
-            Sawmill.Error(
+            Log.Error(
                 $"LLM director authorization callback failed: {exception.GetType().Name}.");
             return false;
         }
@@ -613,7 +612,7 @@ public sealed class LlmGameplayDirectorSystem : EntitySystem
         }
         catch (Exception exception)
         {
-            Sawmill.Error(
+            Log.Error(
                 $"LLM director completion callback failed: {exception.GetType().Name}.");
         }
     }
@@ -677,7 +676,7 @@ public sealed class LlmGameplayDirectorSystem : EntitySystem
             return;
         }
 
-        Sawmill.Info(message);
+        Log.Info(message);
     }
 
     private enum DirectorChoiceKind : byte

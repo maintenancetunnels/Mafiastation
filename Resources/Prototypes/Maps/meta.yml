@@ -1,0 +1,19 @@
+# Meta Station — SS14 Metastation port (surface deck / z0), sourced from the Monolith fork
+# and sublicensed MIT. Registered here minimally: jobs/shuttle come from StandardNanotrasenStation
+# defaults rather than Monolith's overrides (which reference fork-renamed ids). The station proto
+# carries our _CE ZLevels hook, so the basement deck stacks below via its mapsBelow.
+- type: gameMap
+  id: Meta
+  mapName: 'Meta Station'
+  mapPath: /Maps/meta.yml
+  minPlayers: 0
+  maxPlayers: 80
+  stations:
+    Meta:
+      stationProto: StandardNanotrasenStation
+      components:
+        - type: StationNameSetup
+          mapNameTemplate: '{0} Meta Station {1}'
+          nameGenerator:
+            !type:NanotrasenNameGenerator
+            prefixCreator: 'TG'

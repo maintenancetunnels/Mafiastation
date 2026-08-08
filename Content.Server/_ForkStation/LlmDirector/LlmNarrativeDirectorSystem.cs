@@ -33,7 +33,6 @@ public sealed class LlmNarrativeDirectorSystem : EntitySystem
     [Dependency] private readonly GameTicker _ticker = default!;
     [Dependency] private readonly LlmGameplayDirectorSystem _director = default!;
 
-    private static readonly ISawmill Sawmill = Logger.GetSawmill("mafia.llm.narrative");
 
     private readonly Queue<LlmNarrativeMemory> _history = new();
     private TimeSpan _nextUpdate;
@@ -90,7 +89,7 @@ public sealed class LlmNarrativeDirectorSystem : EntitySystem
         if (!TryQueueDecision(now, out var error))
         {
             _lastError = error;
-            Sawmill.Warning($"Narrative decision was not queued: {error}");
+            Log.Warning($"Narrative decision was not queued: {error}");
         }
     }
 

@@ -24,7 +24,6 @@ public sealed class GoodBehaviorSystem : EntitySystem
     [Dependency] private readonly PersistentPrisonerSystem _penalties = default!;
     [Dependency] private readonly SharedMindSystem _mind = default!;
 
-    private static readonly ISawmill Log = Logger.GetSawmill("persistent.prisoner.behavior");
 
     public override void Initialize()
     {

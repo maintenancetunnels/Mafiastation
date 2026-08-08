@@ -57,7 +57,6 @@ public sealed class LlmModerationSystem : EntitySystem
     [Dependency] private readonly MafiaLlmGatewaySystem _gateway = default!;
     [Dependency] private readonly PersistentPrisonerSystem _penalties = default!;
 
-    private static readonly ISawmill Sawmill = Logger.GetSawmill("mafia.moderation");
     private static readonly JsonSerializerOptions PromptJsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -427,6 +426,6 @@ public sealed class LlmModerationSystem : EntitySystem
             return;
 
         _nextFailureLog = now + TimeSpan.FromMinutes(5);
-        Sawmill.Warning(message);
+        Log.Warning(message);
     }
 }

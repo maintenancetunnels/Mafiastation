@@ -19,6 +19,8 @@ public sealed class LlmPilotPolicyTests
             Assert.That(prompt, Does.Contain("null equipment item"));
             Assert.That(prompt, Does.Contain("appearance"));
             Assert.That(prompt, Does.Contain("hidden roles or objectives"));
+            Assert.That(prompt, Does.Contain("recentIncidents"));
+            Assert.That(prompt, Does.Contain("immediate physical survival action"));
         });
     }
 
@@ -73,6 +75,26 @@ public sealed class LlmPilotPolicyTests
         {
             recentSpeech = new[] { new { speaker = "Alex", text = "Cargo needs help.", channel = "radio" } },
         });
+        var readConversation = PilotJsonTests.Response(new
+        {
+            recentSpeech = new[]
+            {
+                new
+                {
+                    speaker = "Alex",
+                    message = "Cargo needs help.",
+                    channel = "radio",
+                    unread = false,
+                },
+            },
+        });
+        var attack = PilotJsonTests.Response(new
+        {
+            recentIncidents = new[]
+            {
+                new { kind = "damage", amount = 12, sourceName = "Obedience", unread = true },
+            },
+        });
         var completed = PilotJsonTests.Response(new
         {
             goal = new { state = "completed" },
@@ -83,6 +105,8 @@ public sealed class LlmPilotPolicyTests
             Assert.That(LlmPilotPolicy.HasContextualSpeechTrigger(firstTurn), Is.False);
             Assert.That(LlmPilotPolicy.HasContextualSpeechTrigger(quiet), Is.False);
             Assert.That(LlmPilotPolicy.HasContextualSpeechTrigger(conversation), Is.True);
+            Assert.That(LlmPilotPolicy.HasContextualSpeechTrigger(readConversation), Is.False);
+            Assert.That(LlmPilotPolicy.HasContextualSpeechTrigger(attack), Is.True);
             Assert.That(LlmPilotPolicy.HasContextualSpeechTrigger(completed), Is.True);
         });
     }
@@ -129,10 +153,9 @@ public sealed class LlmPilotPolicyTests
             Assert.That(request.RootElement.GetProperty("model").GetString(), Is.EqualTo("gpt-5.6-luna"));
             Assert.That(request.RootElement.GetProperty("store").GetBoolean(), Is.False);
             Assert.That(request.RootElement.GetProperty("instructions").GetString(), Does.Contain("ordinary non-antagonist"));
-            Assert.That(request.RootElement.GetProperty("input").GetString(), Does.Contain("Latest bounded observation"));
-            Assert.That(
-                request.RootElement.GetProperty("reasoning").GetProperty("effort").GetString(),
-                Is.EqualTo("none"));
+            Assert.That(request.RootElement.GetProperty("input").GetString(), Does.Contain("Latest bounded observation JSON"));
+            Assert.That(request.RootElement.TryGetProperty("reasoning", out _), Is.False,
+                "Reasoning effort 'none' is represented by omitting the optional reasoning block.");
             Assert.That(
                 request.RootElement.GetProperty("text").GetProperty("format").GetProperty("type").GetString(),
                 Is.EqualTo("json_object"));

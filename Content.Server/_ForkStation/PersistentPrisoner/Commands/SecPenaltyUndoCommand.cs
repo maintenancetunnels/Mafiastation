@@ -56,10 +56,13 @@ public sealed class SecPenaltyUndoCommand : IConsoleCommand
 
         var system = _systems.GetEntitySystem<PersistentPrisonerSystem>();
 
-        // Verify the penalty was issued this round and by this officer
-        var allPenalties = system.GetPenaltySummary();
-        // For now, we allow any sec to undo any same-round penalty.
-        // The system tracks round IDs on penalties for this purpose.
+        // Security may only correct a mistake they made in the round still being played. Anything
+        // older, or anything an admin issued, is out of their hands.
+        if (!system.CanSecurityUndo(penaltyId, out var denialReason))
+        {
+            shell.WriteError(denialReason);
+            return;
+        }
 
         if (system.RemovePenalty(penaltyId))
         {

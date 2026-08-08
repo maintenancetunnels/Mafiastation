@@ -33,6 +33,11 @@ public sealed partial class ScalingViewport
 
     private IEye? _fallbackEye;
 
+    // Shader prototype ids. Kept as ProtoId fields (not literals in Index()) to satisfy the
+    // RobustToolbox RA0033 analyzer, which forbids literal ids passed to IPrototypeManager.Index.
+    private static readonly ProtoId<ShaderPrototype> ZBlurBlitShaderId = "CEZBlurBlit";
+    private static readonly ProtoId<ShaderPrototype> ZCloudsShaderId = "CEZClouds";
+
     /// <summary>
     /// We are looking for at least one empty tile on the screen.
     /// This is used to ensure that it makes sense to draw the z-planes and that they are visible.
@@ -352,7 +357,7 @@ public sealed partial class ScalingViewport
             _transitViewport.RenderScale = viewport.RenderScale;
         }
 
-        _transitBlitShader ??= _prototypeManager.Index<ShaderPrototype>("CEZBlurBlit").InstanceUnique();
+        _transitBlitShader ??= _prototypeManager.Index(ZBlurBlitShaderId).InstanceUnique();
 
         zEye.DrawParallax = false;
 
@@ -436,7 +441,7 @@ public sealed partial class ScalingViewport
     /// </summary>
     private void DrawCloudDeck(IRenderHandle renderHandle, IClydeViewport viewport, Color color, float coverage)
     {
-        _cloudShader ??= _prototypeManager.Index<ShaderPrototype>("CEZClouds").InstanceUnique();
+        _cloudShader ??= _prototypeManager.Index(ZCloudsShaderId).InstanceUnique();
 
         var screenHandle = renderHandle.DrawingHandleScreen;
         screenHandle.RenderInRenderTarget(viewport.RenderTarget, () =>
@@ -453,7 +458,7 @@ public sealed partial class ScalingViewport
 
     private void DrawCloudWisps(IRenderHandle renderHandle, IClydeViewport viewport, Color color)
     {
-        _cloudShader ??= _prototypeManager.Index<ShaderPrototype>("CEZClouds").InstanceUnique();
+        _cloudShader ??= _prototypeManager.Index(ZCloudsShaderId).InstanceUnique();
 
         var screenHandle = renderHandle.DrawingHandleScreen;
         screenHandle.RenderInRenderTarget(viewport.RenderTarget, () =>

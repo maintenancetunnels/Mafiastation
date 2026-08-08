@@ -8,6 +8,8 @@
 mob_pushing = true
 
 [game]
+# A real station, not the Dev debug grid the development build preset defaults to.
+map = "Asterisk"
 # Lobby must be ON for defaultpreset to apply: with the lobby disabled the ticker
 # hard-codes sandbox (GameTicker.GamePreset.cs). Production behavior = lobby on.
 lobbyenabled = true
@@ -26,4 +28,4 @@ enabled = true
 [mafiastation]
 # The station has a basement. Nobody built it. It was always there.
 basement_enabled = true
-basement_grid = "/Maps/Ruins/ruined_prison_ship.yml"
+basement_grid = "/Maps/_DV/Nonstations/glacier_surface_outpost.yml"

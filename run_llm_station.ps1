@@ -177,6 +177,10 @@ if ($NoLlm) {
 $serverArgs += @(
     '--cvar', "net.port=$Port",
     '--cvar', 'game.lobbyenabled=true',
+    # These reviewed local AI accounts begin with zero department playtime. The ordinary SS14
+    # timer gate silently drops Security/Medical/Engineering spawns, leaving connected bodies in
+    # the lobby. This launcher is an isolated loopback experiment, so permit its allowlisted jobs.
+    '--cvar', 'game.role_timers=false',
     '--cvar', 'game.defaultpreset=Mafiastation',
     '--cvar', 'mafia.ai_pilot.server_enabled=true',
     '--cvar', "mafia.ai_pilot.allowed_accounts=$accountList",
@@ -255,7 +259,7 @@ else {
         '--client-cvar', 'mafia.ai_pilot.client_allow_speech=true',
         '--model-max-concurrency', $ModelMaxConcurrency,
         '--model-timeout-seconds', 60,
-        '--max-tokens', 200
+            '--max-tokens', 400
     )
     if ($Provider -eq 'openai-responses') {
         $labArgs += @('--reasoning-effort', $ReasoningEffort)

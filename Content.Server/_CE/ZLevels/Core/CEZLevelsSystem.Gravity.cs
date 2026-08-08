@@ -17,7 +17,6 @@ namespace Content.Server._CE.ZLevels.Core;
 public sealed partial class CEZLevelsSystem
 {
     [Dependency] private ExplosionSystem _explosion = default!;
-    [Dependency] private GravitySystem _grav = default!;
 
     [Dependency] private EntityQuery<CEZMapComponent> _zMapQuery = default!;
     [Dependency] private EntityQuery<CEZGroundLayerComponent> _zGroundQuery = default!;
