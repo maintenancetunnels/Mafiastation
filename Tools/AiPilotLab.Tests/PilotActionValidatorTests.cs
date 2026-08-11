@@ -9,6 +9,24 @@ public sealed class PilotActionValidatorTests
     private readonly PilotActionValidator _validator = new();
 
     [Test]
+    public void RejectsHarnessActionsAsModelChoices()
+    {
+        foreach (var actionName in new[] { "status", "observe", "goal_status", "stop" })
+        {
+            var action = JsonSerializer.SerializeToElement(new
+            {
+                action = actionName,
+                arguments = new { },
+            });
+
+            var result = _validator.Validate(action, null, false);
+
+            Assert.That(result.IsValid, Is.False, actionName);
+            Assert.That(result.Error, Does.Contain("reserved for pilot orchestration"), actionName);
+        }
+    }
+
+    [Test]
     public void RejectsTargetOutsideLatestObservation()
     {
         var observation = PilotJsonTests.Response(new

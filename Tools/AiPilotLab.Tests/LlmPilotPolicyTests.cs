@@ -21,6 +21,9 @@ public sealed class LlmPilotPolicyTests
             Assert.That(prompt, Does.Contain("hidden roles or objectives"));
             Assert.That(prompt, Does.Contain("recentIncidents"));
             Assert.That(prompt, Does.Contain("immediate physical survival action"));
+            Assert.That(prompt, Does.Contain("Allowed actions: move, interact, use, pickup"));
+            Assert.That(prompt, Does.Not.Contain("Allowed actions: status"));
+            Assert.That(prompt, Does.Contain("never model actions"));
         });
     }
 
@@ -115,7 +118,7 @@ public sealed class LlmPilotPolicyTests
     public async Task OpenAiCompatibleRequestsJsonObjectMode()
     {
         using var handler = new RecordingHandler(OpenAiResponse(
-            """{"action":"observe","arguments":{}}"""));
+            """{"action":"move","arguments":{"direction":"north"}}"""));
         using var client = new HttpClient(handler);
         var decision = await Policy(client).DecideAsync("Do ordinary station work.", Observation());
 
@@ -125,7 +128,7 @@ public sealed class LlmPilotPolicyTests
             Assert.That(
                 request.RootElement.GetProperty("response_format").GetProperty("type").GetString(),
                 Is.EqualTo("json_object"));
-            Assert.That(decision.Request.Action, Is.EqualTo("observe"));
+            Assert.That(decision.Request.Action, Is.EqualTo("move"));
             Assert.That(decision.RepairAttempts, Is.Zero);
         });
     }
@@ -134,7 +137,7 @@ public sealed class LlmPilotPolicyTests
     public async Task OpenAiResponsesUsesStatelessLowLatencyJsonMode()
     {
         using var handler = new RecordingHandler(OpenAiResponsesResponse(
-            """{"action":"observe","arguments":{}}"""));
+            """{"action":"move","arguments":{"direction":"north"}}"""));
         using var client = new HttpClient(handler);
         var policy = new LlmPilotPolicy(client, new LlmPilotPolicyOptions(
             "openai-responses",
@@ -160,7 +163,7 @@ public sealed class LlmPilotPolicyTests
                 request.RootElement.GetProperty("text").GetProperty("format").GetProperty("type").GetString(),
                 Is.EqualTo("json_object"));
             Assert.That(request.RootElement.TryGetProperty("messages", out _), Is.False);
-            Assert.That(decision.Request.Action, Is.EqualTo("observe"));
+            Assert.That(decision.Request.Action, Is.EqualTo("move"));
         });
     }
 
@@ -168,7 +171,7 @@ public sealed class LlmPilotPolicyTests
     public async Task JsonObjectModeCanBeDisabledForLegacyEndpoint()
     {
         using var handler = new RecordingHandler(OpenAiResponse(
-            """{"action":"observe","arguments":{}}"""));
+            """{"action":"move","arguments":{"direction":"north"}}"""));
         using var client = new HttpClient(handler);
         await Policy(client, useJsonObjectResponseFormat: false)
             .DecideAsync("Do ordinary station work.", Observation());
@@ -184,7 +187,7 @@ public sealed class LlmPilotPolicyTests
             """
             Here is the requested action:
             ```json
-            {"action":"observe","arguments":{"note":"brace } remains inside the string"}}
+            {"action":"move","arguments":{"direction":"north","note":"brace } remains inside the string"}}
             ```
             Ready.
             """));
@@ -193,7 +196,7 @@ public sealed class LlmPilotPolicyTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(decision.Request.Action, Is.EqualTo("observe"));
+            Assert.That(decision.Request.Action, Is.EqualTo("move"));
             Assert.That(decision.RepairAttempts, Is.Zero);
             Assert.That(handler.RequestBodies, Has.Count.EqualTo(1));
         });
@@ -204,7 +207,7 @@ public sealed class LlmPilotPolicyTests
     {
         using var handler = new RecordingHandler(
             OpenAiResponse("I should look around before acting."),
-            OpenAiResponse("""{"action":"observe","arguments":{}}"""));
+            OpenAiResponse("""{"action":"move","arguments":{"direction":"north"}}"""));
         using var client = new HttpClient(handler);
         var decision = await Policy(client).DecideAsync("Do ordinary station work.", Observation());
 
@@ -212,7 +215,7 @@ public sealed class LlmPilotPolicyTests
         var retryPrompt = retry.RootElement.GetProperty("messages")[1].GetProperty("content").GetString();
         Assert.Multiple(() =>
         {
-            Assert.That(decision.Request.Action, Is.EqualTo("observe"));
+            Assert.That(decision.Request.Action, Is.EqualTo("move"));
             Assert.That(decision.RepairAttempts, Is.EqualTo(1));
             Assert.That(handler.RequestBodies, Has.Count.EqualTo(2));
             Assert.That(retryPrompt, Does.Contain("Correction:"));
@@ -225,7 +228,7 @@ public sealed class LlmPilotPolicyTests
     {
         using var handler = new RecordingHandler(
             OpenAiResponse("""{"action":"move_relative","arguments":{"x":1,"y":0}}"""),
-            OpenAiResponse("""{"action":"observe","arguments":{}}"""));
+            OpenAiResponse("""{"action":"move","arguments":{"direction":"north"}}"""));
         using var client = new HttpClient(handler);
         var decision = await Policy(client).DecideAsync("Do ordinary station work.", Observation());
 
@@ -233,10 +236,30 @@ public sealed class LlmPilotPolicyTests
         var retryPrompt = retry.RootElement.GetProperty("messages")[1].GetProperty("content").GetString();
         Assert.Multiple(() =>
         {
-            Assert.That(decision.Request.Action, Is.EqualTo("observe"));
+            Assert.That(decision.Request.Action, Is.EqualTo("move"));
             Assert.That(decision.RepairAttempts, Is.EqualTo(1));
             Assert.That(retryPrompt, Does.Contain("move_relative"));
             Assert.That(retryPrompt, Does.Contain("belong inside arguments of action goal"));
+        });
+    }
+
+    [Test]
+    public async Task RepairsReservedHarnessActionOnce()
+    {
+        using var handler = new RecordingHandler(
+            OpenAiResponse("""{"action":"stop","arguments":{}}"""),
+            OpenAiResponse("""{"action":"move","arguments":{"direction":"north"}}"""));
+        using var client = new HttpClient(handler);
+
+        var decision = await Policy(client).DecideAsync("Do ordinary station work.", Observation());
+
+        using var retry = JsonDocument.Parse(handler.RequestBodies[1]);
+        var retryPrompt = retry.RootElement.GetProperty("messages")[1].GetProperty("content").GetString();
+        Assert.Multiple(() =>
+        {
+            Assert.That(decision.Request.Action, Is.EqualTo("move"));
+            Assert.That(decision.RepairAttempts, Is.EqualTo(1));
+            Assert.That(retryPrompt, Does.Contain("reserved for pilot orchestration"));
         });
     }
 
@@ -246,7 +269,7 @@ public sealed class LlmPilotPolicyTests
         using var handler = new RecordingHandler(
             OpenAiResponse("not json"),
             OpenAiResponse("still not json"),
-            OpenAiResponse("""{"action":"observe","arguments":{}}"""));
+            OpenAiResponse("""{"action":"move","arguments":{"direction":"north"}}"""));
         using var client = new HttpClient(handler);
 
         Assert.That(
@@ -272,7 +295,7 @@ public sealed class LlmPilotPolicyTests
     private static PilotResponse Observation() => PilotJsonTests.Response(new
     {
         attached = true,
-        capabilities = new { canObserve = true },
+        capabilities = new { canMove = true },
     });
 
     private static string OpenAiResponse(string content) => JsonSerializer.Serialize(new

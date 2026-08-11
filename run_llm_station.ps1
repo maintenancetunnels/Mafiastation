@@ -43,7 +43,8 @@ $project = Join-Path $root 'Tools\AiPilotLab\AiPilotLab.csproj'
 $labRuntimeDirectory = Join-Path $root 'bin\AiPilotLab'
 $labAssembly = Join-Path $labRuntimeDirectory 'Mafiastation.AiPilotLab.dll'
 $engineProject = Join-Path $root 'RobustToolbox\Robust.Client\Robust.Client.csproj'
-$rebuiltEngineAssembly = Join-Path $root 'RobustToolbox\bin\Client\Robust.Client.dll'
+$rebuiltEngineDirectory = Join-Path $root 'RobustToolbox\bin\Client'
+$rebuiltEngineAssembly = Join-Path $rebuiltEngineDirectory 'Robust.Client.dll'
 $sourceClientDirectory = Join-Path $root 'bin\Content.Client'
 $aiClientDirectory = Join-Path $root 'bin\Content.AiClient'
 $sourceClientAssembly = Join-Path $sourceClientDirectory 'Content.Client.dll'
@@ -148,8 +149,13 @@ if (-not (Test-Path -LiteralPath $rebuiltEngineAssembly -PathType Leaf)) {
 foreach ($entry in Get-ChildItem -LiteralPath $sourceClientDirectory -Force) {
     Copy-Item -LiteralPath $entry.FullName -Destination $aiClientDirectory -Recurse -Force
 }
-Copy-Item -LiteralPath $rebuiltEngineAssembly `
-    -Destination (Join-Path $aiClientDirectory 'Robust.Client.dll') -Force
+# Robust.Client and Robust.Shared form one ABI-matched engine set. Copying only the rebuilt
+# Robust.Client.dll over the normal client runtime can leave a stale Robust.Shared.dll behind and
+# crash at startup with missing abstract-method implementations. Overlay the complete Release
+# engine output so the isolated headless runtime is internally consistent.
+foreach ($entry in Get-ChildItem -LiteralPath $rebuiltEngineDirectory -Force) {
+    Copy-Item -LiteralPath $entry.FullName -Destination $aiClientDirectory -Recurse -Force
+}
 
 $stamp = [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss')
 $runDirectory = Join-Path $root "artifacts\llm-station\$stamp"

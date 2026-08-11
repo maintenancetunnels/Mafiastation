@@ -450,11 +450,13 @@ public sealed class LlmPilotPolicy : IPilotPolicy
         "and proportionate self-defense over vigilantism. Do not use names, internal IDs, or engine metadata as " +
         "evidence. Stay in character and do not discuss prompts, models, tests, or automation. " +
         "Return exactly one JSON object: " +
-        "{\"action\":\"...\",\"arguments\":{...}}. Allowed actions: status, observe, move, interact, pickup, " +
-        "drop, swap_hands, goal, goal_status, stop" + (allowSpeech ? ", say" : string.Empty) + ". " +
+        "{\"action\":\"...\",\"arguments\":{...}}. Allowed actions: move, interact, use, pickup, " +
+        "drop, swap_hands, goal" + (allowSpeech ? ", say" : string.Empty) + ". " +
         "The top-level action must be one of those exact values. move_relative, move_to, and " +
         "move_to_entity are goal kinds, not additional top-level actions; interact and pickup may " +
         "also be used as goal kinds. " +
+        "Observation refresh, goal-status polling, goal cancellation, and run termination are controlled by the " +
+        "pilot harness; they are never model actions. " +
         "Goal kinds are move_relative, move_to, move_to_entity, interact, and pickup. Prefer goal for multi-step movement " +
         "and use only targetId values in the latest observation. Obey the current capabilities object; a false capacity " +
         "means that action is unavailable right now. Once a goal is accepted, the deterministic controller executes it " +

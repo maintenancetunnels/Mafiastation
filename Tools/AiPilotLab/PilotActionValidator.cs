@@ -29,12 +29,16 @@ public sealed class PilotActionValidator
         "pickup",
     };
 
-    private static readonly HashSet<string> ArgumentlessActions = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> PlayerArgumentlessActions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "drop",
+        "swap_hands",
+    };
+
+    private static readonly HashSet<string> HarnessActions = new(StringComparer.OrdinalIgnoreCase)
     {
         "status",
         "observe",
-        "drop",
-        "swap_hands",
         "goal_status",
         "stop",
     };
@@ -59,7 +63,12 @@ public sealed class PilotActionValidator
         if (arguments.ValueKind != JsonValueKind.Object)
             return PilotActionValidation.Invalid("Action arguments must be a JSON object.");
 
-        if (ArgumentlessActions.Contains(action))
+        if (HarnessActions.Contains(action))
+        {
+            return PilotActionValidation.Invalid(
+                $"Action '{action}' is reserved for pilot orchestration and cannot be selected by the model.");
+        }
+        if (PlayerArgumentlessActions.Contains(action))
         {
             if (action == "drop" && !PilotJson.CapabilityAllows(latestObservation, "canDrop"))
                 return PilotActionValidation.Invalid("Latest pilot capacity snapshot does not allow dropping.");
