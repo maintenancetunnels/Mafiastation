@@ -14,5 +14,6 @@
   rules:
   - DummyNonAntagChance
   - Traitor
+  - AnomalousContainment
   - RampingStationEventScheduler
   - BasicRoundstartVariation

@@ -1,0 +1,70 @@
+# Euclid holding: MS-173 (weeping-angel statue) plus a procedures sheet.
+# Prison Guards keep visual contact. Prisoners are D-class. Science observes.
+# The object does NOT bump doors — a closed cell is actual containment.
+
+- type: entity
+  parent: MobStatueStalker
+  id: MobMS173
+  name: MS-173
+  suffix: Euclid, Containment
+  description: Euclid-class. Do not break visual contact. Do not blink.
+  components:
+  - type: Tag
+    tags:
+    - Unimplantable
+    # No DoorBumpOpener: holding cells work until someone opens the door.
+
+- type: entity
+  parent: Paper
+  id: PaperMS173Procedures
+  name: MS-173 special containment procedures
+  description: A classified Site document. Euclid. Visual contact required.
+  components:
+  - type: Paper
+    content: "SPECIAL CONTAINMENT PROCEDURES — MS-173\nObject class: Euclid\nLocation: Anomalous holding / solitary wing\n\nMS-173 must remain under direct visual observation by at least one living staff member whenever its cell is open. Closed, opaque doors constitute containment. The object does not operate doors.\n\nAssigned staff:\n- Prison Guards: primary observers. Do not leave the viewport unattended.\n- D-class (prisoners): testing and cell cleaning only while an observer is present.\n- Science: observation and notes. No physical contact.\n\nIf visual contact is lost, assume a breach. Do not blink."
+  - type: Sprite
+    sprite: Objects/Misc/bureaucracy.rsi
+    layers:
+    - state: paper
+    - state: paper_words
+      map: ["enum.PaperVisualLayers.Writing"]
+      visible: true
+    - state: paper_stamp-generic
+      map: ["enum.PaperVisualLayers.Stamp"]
+      visible: false
+
+- type: entity
+  id: SpawnPointAnomalousContainment
+  parent: MarkerBase
+  name: anomalous containment spawn
+  suffix: MS-173, Euclid
+  components:
+  - type: AnomalousContainmentSpawnPoint
+  - type: Sprite
+    layers:
+      - state: red
+      - sprite: _ForkStation/Mobs/statue_stalker.rsi
+        state: statue
+
+- type: entity
+  parent: BaseGameRule
+  id: AnomalousContainment
+  components:
+  - type: AnomalousContainmentRule
+
+- type: entity
+  parent: BaseStationEventLongDelay
+  id: ContainmentBreach
+  components:
+  - type: StationEvent
+    weight: 2
+    earliestStart: 25
+    reoccurrenceDelay: 90
+    minimumPlayers: 2
+    duration: 180
+    maxDuration: 300
+    startAudio:
+      path: /Audio/Ambience/spookyspace2.ogg
+      params:
+        volume: -4
+  - type: ContainmentBreachRule

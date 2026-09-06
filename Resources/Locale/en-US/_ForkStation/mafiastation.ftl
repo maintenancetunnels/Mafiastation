@@ -37,3 +37,22 @@ mafiastation-roundend-whispers = [color=#8a7f9e]{$count} transmissions were rece
 mafiastation-roundend-sightings = [color=#8a7f9e]{$count} reported sightings could not be verified.[/color]
 
 mafiastation-multiz-climb = You climb the ladder up.
+
+# SCP-style anomalous containment (MS-173). Prison Guard + D-class prisoner jobs.
+mafiastation-containment-sender = Site Command
+mafiastation-containment-briefing = Euclid-class object MS-173 is in holding. Prison Guards: maintain visual contact at all times. D-class (prisoners) may be tasked for testing. Science: observe, do not approach. Do not blink.
+mafiastation-containment-breach = CONTAINMENT BREACH. Euclid-class MS-173 is unaccounted for. Re-establish visual contact. D-class to the holding wing. Do not blink.
+mafiastation-containment-roundend = [color=#8a7f9e]Euclid object MS-173 was assigned to holding. Visual contact was the containment.[/color]
+
+paper-ms173-content = SPECIAL CONTAINMENT PROCEDURES — MS-173
+    Object class: Euclid
+    Location: Anomalous holding / solitary wing
+
+    MS-173 must remain under direct visual observation by at least one living staff member whenever its cell is open. Closed, opaque doors constitute containment. The object does not operate doors.
+
+    Assigned staff:
+    - Prison Guards: primary observers. Do not leave the viewport unattended.
+    - D-class (prisoners): testing and cell cleaning only while an observer is present.
+    - Science: observation and notes. No physical contact.
+
+    If visual contact is lost, assume a breach. Do not blink.

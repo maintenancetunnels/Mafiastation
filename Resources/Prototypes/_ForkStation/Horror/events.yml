@@ -18,6 +18,7 @@
   table: !type:AllSelector
     children:
     - id: BlackoutHunt
+    - id: ContainmentBreach
 
 # === Damning entity events (rare random + admin-initiated) ===
 
